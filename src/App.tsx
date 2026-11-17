@@ -446,7 +446,7 @@ export default function App() {
     } catch (err) {
       console.error(err);
       setStoryBanner(
-        'Could not reach Google Drive right now, but your local backup copy is ready below!'
+        'Could not send the storybook to Google Drive, but your local backup copy is ready below!'
       );
     } finally {
       setStorySaving(false);
@@ -501,7 +501,7 @@ export default function App() {
       } else {
         console.error(err);
         setVideoBanner(
-          'Could not record or upload the music video. Check Teacher Setup Mode audio settings.'
+          'Could not record or send the music video to Google Drive. You can still download a local copy if it appears below.'
         );
       }
     } finally {

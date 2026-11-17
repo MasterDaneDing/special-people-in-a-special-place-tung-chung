@@ -382,12 +382,31 @@ export async function postToGoogleAppsScript(
   url: string,
   payload: Record<string, unknown>
 ): Promise<void> {
-  await fetch(url, {
+  if (!url.trim()) {
+    throw new Error('Google Drive export is not set up yet.');
+  }
+
+  const resp = await fetch(url, {
     method: 'POST',
-    mode: 'no-cors',
     headers: { 'Content-Type': 'text/plain;charset=utf-8' },
     body: JSON.stringify(payload),
   });
+
+  const text = await resp.text();
+  let data: { status?: string; message?: string; error?: string } | null = null;
+  if (text) {
+    try {
+      data = JSON.parse(text) as { status?: string; message?: string; error?: string };
+    } catch {
+      data = null;
+    }
+  }
+
+  if (!resp.ok || data?.status === 'error' || data?.error) {
+    throw new Error(
+      data?.message || data?.error || `Drive upload failed (${resp.status})`
+    );
+  }
 }
 
 export function downloadStoryBackupHtml(
