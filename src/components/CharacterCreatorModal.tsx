@@ -63,6 +63,7 @@ export const CharacterCreatorModal: React.FC<CharacterCreatorModalProps> = ({
   useEffect(() => {
     if (!isOpen) {
       stopCamera();
+      setDrawFaceActive(false);
       return;
     }
     warmUpHeadSegmenter();
@@ -88,6 +89,7 @@ export const CharacterCreatorModal: React.FC<CharacterCreatorModalProps> = ({
       setHeadTilt(0);
       setStatusNote('');
       setCameraError('');
+      setDrawFaceActive(false);
     }
   }, [isOpen, pageNumber, defaultName, bodies, initialCharacter]);
 
@@ -180,6 +182,22 @@ export const CharacterCreatorModal: React.FC<CharacterCreatorModalProps> = ({
     reader.readAsDataURL(file);
   };
 
+  const applyDrawnFace = (dataUrl: string) => {
+    setHeadDataUrl(dataUrl);
+    setHeadOffsetX(0);
+    setHeadOffsetY(0);
+    setHeadScale(1.0);
+    setHeadTilt(0);
+    setDrawFaceActive(false);
+    setStatusNote('Drawn face ready! Use the buttons below to adjust it on the neck.');
+  };
+
+  const openDrawFace = () => {
+    stopCamera();
+    setCameraError('');
+    setDrawFaceActive(true);
+  };
+
   const handleFinish = () => {
     if (!headDataUrl || !selectedBody) return;
     const finalName =
@@ -228,6 +246,7 @@ export const CharacterCreatorModal: React.FC<CharacterCreatorModalProps> = ({
             type="button"
             onClick={() => {
               stopCamera();
+              setDrawFaceActive(false);
               onClose();
             }}
             aria-label="Close character creator"
@@ -278,7 +297,7 @@ export const CharacterCreatorModal: React.FC<CharacterCreatorModalProps> = ({
               {/* Left: Camera / Photo Capture + Adjustment Controls */}
               <div className="space-y-4">
                 <p className="text-lg font-bold text-[#3a2e28]">
-                  2. Take a photo or pick one:
+                  2. Take a photo or draw a face:
                 </p>
 
                 {/* Name Input */}
@@ -296,7 +315,14 @@ export const CharacterCreatorModal: React.FC<CharacterCreatorModalProps> = ({
                 </div>
 
                 {/* Live Camera Box if active */}
-                {cameraActive ? (
+                {drawFaceActive ? (
+                  <DrawingCanvas
+                    mode="face"
+                    exportLabel="Use This Face!"
+                    onCancel={() => setDrawFaceActive(false)}
+                    onExport={(dataUrl) => applyDrawnFace(dataUrl)}
+                  />
+                ) : cameraActive ? (
                   <div className="rounded-3xl border-[3px] border-[#3a2e28] bg-black overflow-hidden relative aspect-[4/3]">
                     <video
                       ref={videoRef}
@@ -327,7 +353,7 @@ export const CharacterCreatorModal: React.FC<CharacterCreatorModalProps> = ({
                     </div>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                  <div className="grid grid-cols-2 gap-2.5">
                     <button
                       type="button"
                       onClick={startLiveCamera}
@@ -353,6 +379,15 @@ export const CharacterCreatorModal: React.FC<CharacterCreatorModalProps> = ({
                     >
                       <ImagePlus className="w-6 h-6" />
                       <span>Choose Photo</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={openDrawFace}
+                      className="storybook-btn px-3 py-3 rounded-2xl bg-[#f472b6] text-[#3a2e28] text-base font-bold flex flex-col items-center justify-center gap-1"
+                    >
+                      <Pencil className="w-6 h-6" />
+                      <span>Draw Face</span>
                     </button>
 
                     <input
@@ -540,6 +575,7 @@ export const CharacterCreatorModal: React.FC<CharacterCreatorModalProps> = ({
                 type="button"
                 onClick={() => {
                   stopCamera();
+                  setDrawFaceActive(false);
                   setStep(1);
                 }}
                 className="storybook-btn px-5 rounded-2xl bg-white text-base sm:text-lg font-bold text-[#3a2e28] flex items-center gap-2"
@@ -561,7 +597,7 @@ export const CharacterCreatorModal: React.FC<CharacterCreatorModalProps> = ({
                     <Check className="w-6 h-6 stroke-[3]" />
                   </>
                 ) : (
-                  <span>Take Photo First</span>
+                  <span>Add Photo or Drawing First</span>
                 )}
               </button>
             </>
