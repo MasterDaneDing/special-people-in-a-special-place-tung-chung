@@ -10,6 +10,7 @@ import {
   MapPin,
   Music,
   Pause,
+  Pencil,
   Settings,
   UserPlus,
   Volume2,
@@ -18,10 +19,12 @@ import {
   ADJECTIVES,
   Adjective,
   Character,
+  DrawnObject,
   PageState,
   PRONOUNS,
   Pronoun,
   PlacedCharacter,
+  PlacedObject,
   StorybookConfig,
 } from './types';
 import {
@@ -43,6 +46,8 @@ import { RollingWheel } from './components/RollingWheel';
 import { BackgroundStrip } from './components/BackgroundStrip';
 import { CharacterCreatorModal } from './components/CharacterCreatorModal';
 import { TeacherModeModal } from './components/TeacherModeModal';
+import { DrawObjectModal } from './components/DrawObjectModal';
+import { InteractiveProp } from './components/InteractiveProp';
 
 export default function App() {
   const [config, setConfig] = useState<StorybookConfig>(() => getDefaultConfig());
@@ -53,6 +58,9 @@ export default function App() {
   );
   const [characters, setCharacters] = useState<Character[]>([]);
   const [selectedCharId, setSelectedCharId] = useState<string | null>(null);
+  const [drawnObjects, setDrawnObjects] = useState<DrawnObject[]>([]);
+  const [selectedObjectId, setSelectedObjectId] = useState<string | null>(null);
+  const [drawObjectOpen, setDrawObjectOpen] = useState(false);
 
   // Modals & Popovers
   const [creatorOpen, setCreatorOpen] = useState(false);
@@ -142,6 +150,7 @@ export default function App() {
   const navigateToPage = (targetNum: number) => {
     const clamped = Math.max(1, Math.min(12, targetNum));
     setSelectedCharId(null);
+    setSelectedObjectId(null);
     setPlacesStripOpen(false);
     setEditingPlaceName(false);
 
@@ -303,6 +312,79 @@ export default function App() {
     );
   };
 
+  const placeObjectOnCurrentPage = (obj: DrawnObject) => {
+    setDrawObjectOpen(false);
+    setPages((prev) =>
+      prev.map((p) => {
+        if (p.pageNumber !== currentPageNum) return p;
+        const objects = p.objects || [];
+        const maxZ = Math.max(
+          objects.reduce((m, o) => Math.max(m, o.zIndex), 0),
+          p.placed.reduce((m, c) => Math.max(m, c.zIndex), 0)
+        );
+        const count = objects.length;
+        const newPlaced: PlacedObject = {
+          instanceId: `inst-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          objectId: obj.id,
+          x: Math.max(0.2, Math.min(0.8, 0.42 + ((count * 0.1) % 0.3))),
+          y: 0.55,
+          scale: 1,
+          flipX: false,
+          zIndex: maxZ + 1,
+        };
+        return { ...p, objects: [...objects, newPlaced] };
+      })
+    );
+    setSelectedCharId(null);
+    setSelectedObjectId(null);
+  };
+
+  const handleObjectChange = (instanceId: string, patch: Partial<PlacedObject>) => {
+    setPages((prev) =>
+      prev.map((p) => {
+        if (p.pageNumber !== currentPageNum) return p;
+        return {
+          ...p,
+          objects: (p.objects || []).map((o) =>
+            o.instanceId === instanceId ? { ...o, ...patch } : o
+          ),
+        };
+      })
+    );
+  };
+
+  const bringObjectForward = (instanceId: string) => {
+    setPages((prev) =>
+      prev.map((p) => {
+        if (p.pageNumber !== currentPageNum) return p;
+        const objects = p.objects || [];
+        const maxZ = Math.max(
+          objects.reduce((m, o) => Math.max(m, o.zIndex), 1),
+          p.placed.reduce((m, c) => Math.max(m, c.zIndex), 1)
+        );
+        return {
+          ...p,
+          objects: objects.map((o) =>
+            o.instanceId === instanceId ? { ...o, zIndex: maxZ + 1 } : o
+          ),
+        };
+      })
+    );
+  };
+
+  const removeObjectFromPage = (instanceId: string) => {
+    setPages((prev) =>
+      prev.map((p) => {
+        if (p.pageNumber !== currentPageNum) return p;
+        return {
+          ...p,
+          objects: (p.objects || []).filter((o) => o.instanceId !== instanceId),
+        };
+      })
+    );
+    setSelectedObjectId((curr) => (curr === instanceId ? null : curr));
+  };
+
   const cycleBackground = () => {
     if (config.places.length <= 1) return;
     const idx = config.places.findIndex((p) => p.id === currentPage.bgPlaceId);
@@ -320,6 +402,7 @@ export default function App() {
       return;
     }
     setSelectedCharId(null);
+    setSelectedObjectId(null);
     const now = Date.now();
     if (now - lastBgTapRef.current < 320) {
       lastBgTapRef.current = 0;
@@ -340,6 +423,7 @@ export default function App() {
         pages,
         characters,
         config.places,
+        drawnObjects,
         (pct) => setStoryProgress(pct)
       );
 
@@ -391,6 +475,7 @@ export default function App() {
         characters,
         places: config.places,
         danceSongUrl: config.danceSongUrl,
+        drawnObjects,
         signal: controller.signal,
         onProgress: (pct, elapsed, total) => {
           setVideoProgress(pct);
@@ -835,6 +920,15 @@ export default function App() {
                 </button>
               )}
 
+              <button
+                type="button"
+                onClick={() => setDrawObjectOpen(true)}
+                className="storybook-btn px-4 rounded-2xl bg-[#4ade80] text-sm sm:text-base font-bold text-[#3a2e28] flex items-center gap-2"
+              >
+                <Pencil className="w-5 h-5" />
+                <span>Draw Thing!</span>
+              </button>
+
               {currentPageNum === 12 && (
                 <button
                   type="button"
@@ -896,9 +990,34 @@ export default function App() {
                 animIndex={idx}
                 onSelect={() => {
                   setSelectedCharId(pc.charId);
+                  setSelectedObjectId(null);
                   bringCharacterForward(pc.charId);
                 }}
                 onChange={(patch) => handlePlacedChange(pc.charId, patch)}
+              />
+            );
+          })}
+
+          {/* Placed Interactive Drawn Objects */}
+          {(currentPage.objects || []).map((po, idx) => {
+            const obj = drawnObjects.find((o) => o.id === po.objectId);
+            if (!obj) return null;
+            return (
+              <InteractiveProp
+                key={po.instanceId}
+                object={obj}
+                placed={po}
+                stageRef={stageRef}
+                isSelected={selectedObjectId === po.instanceId}
+                danceMode={currentPageNum === 12}
+                animIndex={idx}
+                onSelect={() => {
+                  setSelectedObjectId(po.instanceId);
+                  setSelectedCharId(null);
+                  bringObjectForward(po.instanceId);
+                }}
+                onChange={(patch) => handleObjectChange(po.instanceId, patch)}
+                onRemove={() => removeObjectFromPage(po.instanceId)}
               />
             );
           })}
@@ -1090,6 +1209,19 @@ export default function App() {
         onUpdateConfig={setConfig}
         onResetDefaults={() => setConfig(getDefaultConfig())}
         onClose={() => setTeacherOpen(false)}
+      />
+
+      <DrawObjectModal
+        isOpen={drawObjectOpen}
+        existingObjects={drawnObjects}
+        onClose={() => setDrawObjectOpen(false)}
+        onAddNewObject={(newObj) => {
+          setDrawnObjects((prev) => [...prev, newObj]);
+          placeObjectOnCurrentPage(newObj);
+        }}
+        onReuseObject={(obj) => {
+          placeObjectOnCurrentPage(obj);
+        }}
       />
     </div>
   );

@@ -8,6 +8,7 @@ import {
   Check,
   ImagePlus,
   Loader2,
+  Pencil,
   RotateCcw,
   RotateCw,
   UserCheck,
@@ -16,6 +17,7 @@ import {
   ZoomOut,
 } from 'lucide-react';
 import { BodyAsset, Character } from '../types';
+import { DrawingCanvas } from './DrawingCanvas';
 import { extractFeatheredHead, warmUpHeadSegmenter } from '../utils/headSegmenter';
 
 interface CharacterCreatorModalProps {
@@ -51,6 +53,7 @@ export const CharacterCreatorModal: React.FC<CharacterCreatorModalProps> = ({
   const [statusNote, setStatusNote] = useState<string>('');
   const [cameraActive, setCameraActive] = useState(false);
   const [cameraError, setCameraError] = useState<string>('');
+  const [drawFaceActive, setDrawFaceActive] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);

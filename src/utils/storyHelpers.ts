@@ -836,6 +836,7 @@ export function createInitialPages(places: { id: string }[]): PageState[] {
       pageNumber,
       bgPlaceId: getBg(idx),
       placed: [],
+      objects: [],
       placeName: 'Tung Chung',
       friendName: pageNumber === 1 ? 'Me' : `Friend ${pageNumber}`,
       pronoun: (pageNumber % 2 === 0 ? 'She' : 'He') as Pronoun,

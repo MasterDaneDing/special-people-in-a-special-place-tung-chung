@@ -1,4 +1,4 @@
-import { Character, PageState, PlaceAsset } from '../types';
+import { Character, DrawnObject, PageState, PlaceAsset } from '../types';
 import { getPageSentence } from './storyHelpers';
 import { CHICKEN_PIE_TTF_BASE64 } from './chickenPieFont';
 
@@ -147,6 +147,37 @@ function drawCharacterOnCanvas(
   ctx.restore();
 }
 
+
+function drawPropOnCanvas(
+  ctx: CanvasRenderingContext2D,
+  obj: DrawnObject,
+  img: HTMLImageElement | null,
+  centerX: number,
+  centerY: number,
+  scale: number,
+  flipX: boolean,
+  dancePhase?: number
+) {
+  if (!img) return;
+  const maxDim = Math.max(obj.width || img.width || 120, obj.height || img.height || 120);
+  const baseW = Math.max(64, ((obj.width || img.width) / maxDim) * 150);
+  const baseH = Math.max(64, ((obj.height || img.height) / maxDim) * 150);
+
+  let hopY = 0;
+  let rot = 0;
+  if (dancePhase !== undefined) {
+    hopY = -Math.abs(Math.sin(dancePhase * 1.5)) * 14;
+    rot = Math.sin(dancePhase * 2) * 0.08;
+  }
+
+  ctx.save();
+  ctx.translate(centerX, centerY + hopY);
+  ctx.scale(scale * (flipX ? -1 : 1), scale);
+  ctx.rotate(rot);
+  ctx.drawImage(img, -baseW / 2, -baseH / 2, baseW, baseH);
+  ctx.restore();
+}
+
 function drawStoryBanner(
   ctx: CanvasRenderingContext2D,
   sentence: string,
@@ -247,6 +278,7 @@ export async function renderAllStoryPages(
   pages: PageState[],
   characters: Character[],
   places: PlaceAsset[],
+  drawnObjects: DrawnObject[] = [],
   onProgress?: (pct: number) => void
 ): Promise<RenderedStoryResult> {
   // Preload unique images
@@ -257,6 +289,7 @@ export async function renderAllStoryPages(
     urlsToLoad.add(c.bodySrc);
     urlsToLoad.add(c.headDataUrl);
   });
+  drawnObjects.forEach((o) => urlsToLoad.add(o.dataUrl));
 
   await Promise.all(
     Array.from(urlsToLoad).map(async (url) => {
@@ -287,23 +320,41 @@ export async function renderAllStoryPages(
       ctx.fillRect(0, 0, STAGE_WIDTH, STAGE_HEIGHT);
     }
 
-    // Characters (sorted by zIndex)
-    const sorted = [...page.placed].sort((a, b) => a.zIndex - b.zIndex);
-    for (const pc of sorted) {
-      const char = characters.find((c) => c.id === pc.charId);
-      if (!char) continue;
-      const bodyImg = imageCache.get(char.bodySrc) || null;
-      const headImg = imageCache.get(char.headDataUrl) || null;
-      drawCharacterOnCanvas(
-        ctx,
-        char,
-        bodyImg,
-        headImg,
-        pc.x * STAGE_WIDTH,
-        pc.y * STAGE_HEIGHT,
-        pc.scale * 1.15,
-        pc.flipX
-      );
+    // Characters and props, sorted together by zIndex
+    const layers = [
+      ...page.placed.map((pc) => ({ kind: 'char' as const, zIndex: pc.zIndex, pc })),
+      ...(page.objects || []).map((po) => ({ kind: 'prop' as const, zIndex: po.zIndex, po })),
+    ].sort((a, b) => a.zIndex - b.zIndex);
+    for (const layer of layers) {
+      if (layer.kind === 'char') {
+        const char = characters.find((c) => c.id === layer.pc.charId);
+        if (!char) continue;
+        const bodyImg = imageCache.get(char.bodySrc) || null;
+        const headImg = imageCache.get(char.headDataUrl) || null;
+        drawCharacterOnCanvas(
+          ctx,
+          char,
+          bodyImg,
+          headImg,
+          layer.pc.x * STAGE_WIDTH,
+          layer.pc.y * STAGE_HEIGHT,
+          layer.pc.scale * 1.15,
+          layer.pc.flipX
+        );
+      } else {
+        const obj = drawnObjects.find((o) => o.id === layer.po.objectId);
+        if (!obj) continue;
+        const img = imageCache.get(obj.dataUrl) || null;
+        drawPropOnCanvas(
+          ctx,
+          obj,
+          img,
+          layer.po.x * STAGE_WIDTH,
+          layer.po.y * STAGE_HEIGHT,
+          layer.po.scale,
+          layer.po.flipX
+        );
+      }
     }
 
     const sentence = getPageSentence(page, characters);
@@ -436,10 +487,11 @@ export async function recordDanceMusicVideo(options: {
   characters: Character[];
   places: PlaceAsset[];
   danceSongUrl: string;
+  drawnObjects?: DrawnObject[];
   onProgress: (pct: number, elapsedSec: number, totalSec: number) => void;
   signal?: AbortSignal;
 }): Promise<DanceVideoResult> {
-  const { page12, characters, places, danceSongUrl, onProgress, signal } = options;
+  const { page12, characters, places, danceSongUrl, drawnObjects = [], onProgress, signal } = options;
 
   // Preload images
   const imageCache = new Map<string, HTMLImageElement | null>();
@@ -447,12 +499,15 @@ export async function recordDanceMusicVideo(options: {
   if (place) {
     imageCache.set(place.src, await loadImageSafe(place.src));
   }
-  await Promise.all(
-    characters.flatMap((c) => [
+  await Promise.all([
+    ...characters.flatMap((c) => [
       loadImageSafe(c.bodySrc).then((im) => imageCache.set(c.bodySrc, im)),
       loadImageSafe(c.headDataUrl).then((im) => imageCache.set(c.headDataUrl, im)),
-    ])
-  );
+    ]),
+    ...drawnObjects.map((o) =>
+      loadImageSafe(o.dataUrl).then((im) => imageCache.set(o.dataUrl, im))
+    ),
+  ]);
 
   const canvas = document.createElement('canvas');
   canvas.width = STAGE_WIDTH;
@@ -569,24 +624,46 @@ export async function recordDanceMusicVideo(options: {
       ctx.fillRect(0, 0, STAGE_WIDTH, STAGE_HEIGHT);
     }
 
-    // Draw characters dancing in rhythm (120 BPM = 2 beats/sec)
+    // Draw characters and props dancing in rhythm (120 BPM = 2 beats/sec)
     const phaseBase = elapsedSec * Math.PI * 2;
-    sortedPlaced.forEach((pc, idx) => {
-      const char = characters.find((c) => c.id === pc.charId);
-      if (!char) return;
-      const bodyImg = imageCache.get(char.bodySrc) || null;
-      const headImg = imageCache.get(char.headDataUrl) || null;
-      drawCharacterOnCanvas(
-        ctx,
-        char,
-        bodyImg,
-        headImg,
-        pc.x * STAGE_WIDTH,
-        pc.y * STAGE_HEIGHT,
-        pc.scale * 1.15,
-        pc.flipX,
-        phaseBase + idx * 0.65
-      );
+    const danceLayers = [
+      ...sortedPlaced.map((pc, idx) => ({ kind: 'char' as const, zIndex: pc.zIndex, pc, idx })),
+      ...(page12.objects || []).map((po, idx) => ({ kind: 'prop' as const, zIndex: po.zIndex, po, idx })),
+    ].sort((a, b) => a.zIndex - b.zIndex);
+    danceLayers.forEach((layer) => {
+      if (layer.kind === 'char') {
+        const pc = layer.pc;
+        const char = characters.find((c) => c.id === pc.charId);
+        if (!char) return;
+        const bodyImg = imageCache.get(char.bodySrc) || null;
+        const headImg = imageCache.get(char.headDataUrl) || null;
+        drawCharacterOnCanvas(
+          ctx,
+          char,
+          bodyImg,
+          headImg,
+          pc.x * STAGE_WIDTH,
+          pc.y * STAGE_HEIGHT,
+          pc.scale * 1.15,
+          pc.flipX,
+          phaseBase + layer.idx * 0.65
+        );
+      } else {
+        const po = layer.po;
+        const obj = drawnObjects.find((o) => o.id === po.objectId);
+        if (!obj) return;
+        const img = imageCache.get(obj.dataUrl) || null;
+        drawPropOnCanvas(
+          ctx,
+          obj,
+          img,
+          po.x * STAGE_WIDTH,
+          po.y * STAGE_HEIGHT,
+          po.scale,
+          po.flipX,
+          phaseBase + layer.idx * 0.45
+        );
+      }
     });
 
     // Floating musical notes & stars

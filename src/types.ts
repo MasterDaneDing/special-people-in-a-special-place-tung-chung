@@ -76,10 +76,29 @@ export interface PlacedCharacter {
   zIndex: number;
 }
 
+export interface DrawnObject {
+  id: string;
+  name: string;
+  dataUrl: string;
+  width: number;
+  height: number;
+}
+
+export interface PlacedObject {
+  instanceId: string;
+  objectId: string;
+  x: number;
+  y: number;
+  scale: number;
+  flipX: boolean;
+  zIndex: number;
+}
+
 export interface PageState {
   pageNumber: number; // 1..12
   bgPlaceId: string;
   placed: PlacedCharacter[];
+  objects: PlacedObject[];
   placeName: string; // Editable on Page 1 (defaults to "Tung Chung")
   friendName: string; // Pages 2..11 (and Page 1 student name)
   pronoun: Pronoun;
