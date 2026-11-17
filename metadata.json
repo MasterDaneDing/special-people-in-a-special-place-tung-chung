@@ -1,0 +1,6 @@
+{
+  "name": "Special People in a Special Place: Tung Chung!",
+  "description": "An interactive, iPad-friendly children's digital storybook for creating characters, exploring Tung Chung places, recording dance videos, and saving stories.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,207 @@
+@import "tailwindcss";
+
+@font-face {
+  font-family: 'Chicken Pie';
+  src:
+    url('./CHICKEN Pie.ttf') format('truetype'),
+    url('./CHICKEN Pie.otf') format('opentype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  --ink: #3a2e28;
+  --cream: #fffaf0;
+  --cream-panel: #fff4dd;
+  --sun: #ffd93d;
+  --coral: #ff5946;
+  --sky: #38bdf8;
+  --leaf: #4ade80;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  background-color: #fff5e1;
+  color: var(--ink);
+  font-family: 'Chicken Pie', 'Fredoka', sans-serif;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  touch-action: manipulation;
+  overflow-x: hidden;
+}
+
+input,
+textarea {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.storybook-border {
+  border: 3px solid #3a2e28;
+}
+
+.storybook-shadow {
+  box-shadow: 0 5px 0 #3a2e28;
+}
+
+.storybook-shadow-sm {
+  box-shadow: 0 3px 0 #3a2e28;
+}
+
+.storybook-btn {
+  border: 3px solid #3a2e28;
+  box-shadow: 0 4px 0 #3a2e28;
+  min-height: 54px;
+  transition: transform 120ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 120ms cubic-bezier(0.16, 1, 0.3, 1);
+  cursor: pointer;
+}
+
+.storybook-btn:active:not(:disabled) {
+  transform: translateY(3px);
+  box-shadow: 0 1px 0 #3a2e28;
+}
+
+.storybook-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* Expressive Character Animations */
+@keyframes bodyBreathe {
+  0%, 100% {
+    transform: scale(1, 1) translateY(0px);
+  }
+  50% {
+    transform: scale(1.022, 0.985) translateY(1.5px);
+  }
+}
+
+@keyframes headBob {
+  0%, 100% {
+    transform: rotate(-3deg) translateY(0px);
+  }
+  50% {
+    transform: rotate(3.5deg) translateY(-3px);
+  }
+}
+
+@keyframes idleSway {
+  0%, 100% {
+    transform: rotate(-1.5deg);
+  }
+  50% {
+    transform: rotate(1.5deg);
+  }
+}
+
+@keyframes stepBounce {
+  0%, 100% {
+    transform: translateY(0px) rotate(-4deg);
+  }
+  50% {
+    transform: translateY(-9px) rotate(4deg);
+  }
+}
+
+@keyframes danceBody {
+  0%, 100% {
+    transform: translateY(0px) rotate(-6deg) scale(1, 1);
+  }
+  25% {
+    transform: translateY(-16px) rotate(5deg) scale(0.97, 1.05);
+  }
+  50% {
+    transform: translateY(0px) rotate(6deg) scale(1.04, 0.95);
+  }
+  75% {
+    transform: translateY(-14px) rotate(-5deg) scale(0.98, 1.04);
+  }
+}
+
+@keyframes danceHead {
+  0%, 100% {
+    transform: rotate(-11deg) translateY(0px);
+  }
+  25% {
+    transform: rotate(9deg) translateY(-5px);
+  }
+  50% {
+    transform: rotate(-8deg) translateY(2px);
+  }
+  75% {
+    transform: rotate(12deg) translateY(-4px);
+  }
+}
+
+@keyframes danceHop {
+  0%, 100% {
+    transform: translateX(0px);
+  }
+  25% {
+    transform: translateX(-8px);
+  }
+  75% {
+    transform: translateX(8px);
+  }
+}
+
+.anim-breathe {
+  animation: bodyBreathe 2.8s ease-in-out infinite;
+  transform-origin: center bottom;
+}
+
+.anim-head-bob {
+  animation: headBob 2.4s ease-in-out infinite;
+  transform-origin: center 85%;
+}
+
+.anim-idle-sway {
+  animation: idleSway 3.6s ease-in-out infinite;
+  transform-origin: center bottom;
+}
+
+.anim-step-bounce {
+  animation: stepBounce 0.36s ease-in-out infinite;
+  transform-origin: center bottom;
+}
+
+.anim-dance-hop {
+  animation: danceHop 1.0s ease-in-out infinite;
+}
+
+.anim-dance-body {
+  animation: danceBody 0.9s cubic-bezier(0.36, 0.07, 0.19, 0.97) infinite;
+  transform-origin: center bottom;
+}
+
+.anim-dance-head {
+  animation: danceHead 0.65s ease-in-out infinite;
+  transform-origin: center 85%;
+}
+
+/* Scrollbar polish for iPad horizontal strips */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .anim-breathe,
+  .anim-head-bob,
+  .anim-idle-sway,
+  .anim-step-bounce,
+  .anim-dance-hop,
+  .anim-dance-body,
+  .anim-dance-head {
+    animation: none !important;
+  }
+}
