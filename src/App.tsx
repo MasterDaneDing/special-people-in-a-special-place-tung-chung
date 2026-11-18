@@ -41,6 +41,7 @@ import {
   postToGoogleAppsScript,
   recordDanceMusicVideo,
   renderAllStoryPages,
+  sanitizeMusicVideoFileName,
 } from './utils/canvasExporter';
 import { CoverPage } from './components/CoverPage';
 import { InteractiveCharacter } from './components/InteractiveCharacter';
@@ -101,7 +102,7 @@ export default function App() {
   const [videoProgress, setVideoProgress] = useState(0);
   const [videoTimeLabel, setVideoTimeLabel] = useState('');
   const [videoBanner, setVideoBanner] = useState<string | null>(null);
-  const [videoResult, setVideoResult] = useState<DanceVideoResult | null>(null);
+  const [videoResult, setVideoResult] = useState<(DanceVideoResult & { fileName: string }) | null>(null);
   const recordAbortRef = useRef<AbortController | null>(null);
 
   const stageRef = useRef<HTMLDivElement | null>(null);
@@ -507,13 +508,20 @@ export default function App() {
         },
       });
 
-      setVideoResult(result);
+      const fileName = sanitizeMusicVideoFileName(
+        studentName,
+        studentClass,
+        result.mimeType
+      );
+      setVideoResult({ ...result, fileName });
 
       await postToGoogleAppsScript(config.googleAppsScriptUrl, {
         type: 'video',
         studentName,
+        studentClass,
         mimeType: result.mimeType,
         videoBase64: result.videoBase64,
+        fileName,
       });
 
       setVideoBanner(
@@ -1208,9 +1216,7 @@ export default function App() {
                 {videoResult && (
                   <a
                     href={videoResult.objectUrl}
-                    download={`Tung-Chung-Dance-${studentName.replace(/\s+/g, '_')}.${
-                      videoResult.mimeType.includes('mp4') ? 'mp4' : 'webm'
-                    }`}
+                    download={videoResult.fileName}
                     className="storybook-btn w-full px-4 py-2.5 rounded-2xl bg-[#ffd93d] text-base font-bold text-[#3a2e28] flex items-center justify-center gap-2 no-underline"
                   >
                     <Download className="w-5 h-5" />

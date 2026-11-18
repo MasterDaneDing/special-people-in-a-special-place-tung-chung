@@ -466,15 +466,31 @@ export function downloadStoryBackupHtml(
 }
 
 
+export function sanitizeExportNamePart(value: string, fallback: string): string {
+  const trimmed = (value || '').replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim();
+  return trimmed || fallback;
+}
+
 export function sanitizeStoryPdfFileName(
   studentName: string,
   studentClass: string
 ): string {
-  const clean = (value: string, fallback: string) => {
-    const trimmed = (value || '').replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim();
-    return trimmed || fallback;
-  };
-  return `${clean(studentName, 'Student')}_${clean(studentClass, 'Class')}_Tung Chung.pdf`;
+  return `${sanitizeExportNamePart(studentName, 'Student')}_${sanitizeExportNamePart(studentClass, 'Class')}_Tung Chung.pdf`;
+}
+
+export function musicVideoFileExtension(mimeType: string): 'mp4' | 'webm' {
+  const mime = (mimeType || '').toLowerCase();
+  if (mime.includes('mp4')) return 'mp4';
+  return 'webm';
+}
+
+export function sanitizeMusicVideoFileName(
+  studentName: string,
+  studentClass: string,
+  mimeType: string
+): string {
+  const ext = musicVideoFileExtension(mimeType);
+  return `${sanitizeExportNamePart(studentName, 'Student')}_${sanitizeExportNamePart(studentClass, 'Class')}_Music Video.${ext}`;
 }
 
 function dataUrlToJpeg(dataUrl: string, quality = 0.86): Promise<string> {
