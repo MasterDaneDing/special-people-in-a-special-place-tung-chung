@@ -1,5 +1,16 @@
 # Changes — Special People in a Special Place: Tung Chung!
 
+## Classroom play fixes (cover, places, drawing, PDF)
+
+- **Places slider:** The place picker keeps a visible scrollbar and has left/right arrow buttons. The scrollbar is no longer hidden on that strip. Place names themselves are unchanged.
+- **Adjective vocab cards:** Tapping the selected word on an adjective wheel now reliably opens the vocab card (the wheel no longer steals a tap as a drag). A tappable adjective box with a "?" sits next to **Draw Thing!** on pages 1–11. The sporty and nerdy definitions were not rewritten.
+- **Fill tool:** Fill closes the freehand shape you drew, fills it with the chosen colour, and draws a **black outline** around that shape. It does not stamp a circle.
+- **Drawing cursor:** On a mouse or stylus, the face/object canvas shows a dark brush cursor with a light halo, sized to the brush, so the pointer is visible on the pale pad.
+- **Save as PDF:** Save My Story downloads a real PDF named `{Student Name}_{Student Class}_Tung Chung.pdf` (not HTML or loose images). The PDF starts with an opening page that shows the student's Name and Class, then the 12 story pages. The existing Apps Script payload still includes the PNG pages, and also adds `pdfBase64`, `pdfFileName`, `studentClass`, and `mimeType` without renaming or removing the old fields. The current Apps Script may ignore the new PDF fields until it is updated to save a `.pdf` file.
+- **Name and Class:** The cover has **Name: _______________** and **Class: ___** fields. Those values appear on the PDF opening page and in the filename.
+- **Cover characters:** The three bouncing preview characters stand on the wooden boardwalk path (slightly left of centre through the deck), and the bounce is anchored at their feet so they no longer look like they are flying.
+
+
 This update wires Charlie's real Drive assets into the Vite + React storybook so it can be played with the full set of bodies, places, music, and the Chicken Pie font.
 
 ## Assets added

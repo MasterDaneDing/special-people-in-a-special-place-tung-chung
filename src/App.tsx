@@ -35,7 +35,9 @@ import {
 } from './utils/storyHelpers';
 import {
   DanceVideoResult,
-  downloadStoryBackupHtml,
+  StoryPdfResult,
+  buildStoryPdf,
+  downloadStoryPdf,
   postToGoogleAppsScript,
   recordDanceMusicVideo,
   renderAllStoryPages,
@@ -71,6 +73,8 @@ export default function App() {
   const [placesStripOpen, setPlacesStripOpen] = useState(false);
   const [editingPlaceName, setEditingPlaceName] = useState(false);
   const [vocabAdjective, setVocabAdjective] = useState<Adjective | null>(null);
+  const [bookStudentName, setBookStudentName] = useState('');
+  const [bookStudentClass, setBookStudentClass] = useState('');
 
   // Toast for double-tap background switching
   const [bgToast, setBgToast] = useState<string | null>(null);
@@ -87,8 +91,10 @@ export default function App() {
   const [storyBanner, setStoryBanner] = useState<string | null>(null);
   const [storyBackup, setStoryBackup] = useState<{
     studentName: string;
+    studentClass: string;
     pagePngs: string[];
     sentences: string[];
+    pdf: StoryPdfResult;
   } | null>(null);
 
   const [videoRecording, setVideoRecording] = useState(false);
@@ -105,9 +111,11 @@ export default function App() {
     config.places.find((p) => p.id === currentPage.bgPlaceId) || config.places[0];
 
   const studentName =
+    bookStudentName.trim() ||
     characters.find((c) => c.createdOnPage === 1)?.name ||
     pages[0]?.friendName ||
     'Student';
+  const studentClass = bookStudentClass.trim() || 'Class';
 
   // Sync character updates to page friendName if edited in modal
   const updatePage = (pageNum: number, patch: Partial<PageState>) => {
@@ -429,26 +437,40 @@ export default function App() {
         (pct) => setStoryProgress(pct)
       );
 
+      const pdf = await buildStoryPdf({
+        studentName,
+        studentClass,
+        pagePngs: rendered.pagePngs,
+        coverBgSrc: config.places[0]?.src,
+      });
+
       setStoryBackup({
         studentName,
+        studentClass,
         pagePngs: rendered.pagePngs,
         sentences: rendered.sentences,
+        pdf,
       });
+      downloadStoryPdf(pdf);
 
       await postToGoogleAppsScript(config.googleAppsScriptUrl, {
         type: 'story',
         studentName,
+        studentClass,
         storyText: rendered.storyText,
         pages: rendered.pagePngs,
+        pdfBase64: pdf.pdfBase64,
+        pdfFileName: pdf.fileName,
+        mimeType: 'application/pdf',
       });
 
       setStoryBanner(
-        `Awesome, ${studentName}! Your 12-page storybook was sent to Google Drive!`
+        `Awesome, ${studentName}! Your storybook PDF was downloaded and sent to Google Drive!`
       );
     } catch (err) {
       console.error(err);
       setStoryBanner(
-        'Could not send the storybook to Google Drive, but your local backup copy is ready below!'
+        'Could not send the storybook to Google Drive, but your PDF is ready to download below!'
       );
     } finally {
       setStorySaving(false);
@@ -768,6 +790,10 @@ export default function App() {
         <CoverPage
           places={config.places}
           bodies={config.bodies}
+          studentName={bookStudentName}
+          studentClass={bookStudentClass}
+          onStudentNameChange={setBookStudentName}
+          onStudentClassChange={setBookStudentClass}
           onStartBook={handleStartBook}
           onOpenTeacherMode={() => setTeacherOpen(true)}
         />
@@ -932,6 +958,21 @@ export default function App() {
                 <Pencil className="w-5 h-5" />
                 <span>Draw Thing!</span>
               </button>
+
+              {currentPageNum <= 11 && (
+                <button
+                  type="button"
+                  onClick={() => setVocabAdjective(currentPage.adjective)}
+                  aria-label={`What does ${currentPage.adjective} mean?`}
+                  title={`What does ${currentPage.adjective} mean?`}
+                  className="storybook-btn px-4 rounded-2xl bg-[#ffd93d] text-sm sm:text-base font-bold text-[#3a2e28] flex items-center gap-2"
+                >
+                  <span className="capitalize">{currentPage.adjective}</span>
+                  <span className="w-6 h-6 rounded-full border-2 border-[#3a2e28] bg-white text-sm font-bold flex items-center justify-center">
+                    ?
+                  </span>
+                </button>
+              )}
 
               {currentPageNum === 12 && (
                 <button
@@ -1114,17 +1155,11 @@ export default function App() {
                 {storyBackup && (
                   <button
                     type="button"
-                    onClick={() =>
-                      downloadStoryBackupHtml(
-                        storyBackup.studentName,
-                        storyBackup.pagePngs,
-                        storyBackup.sentences
-                      )
-                    }
+                    onClick={() => downloadStoryPdf(storyBackup.pdf)}
                     className="storybook-btn w-full px-4 py-2.5 rounded-2xl bg-[#fff4dd] text-base font-bold text-[#3a2e28] flex items-center justify-center gap-2"
                   >
                     <Download className="w-5 h-5" />
-                    <span>Download Backup Storybook</span>
+                    <span>Download Storybook PDF</span>
                   </button>
                 )}
               </div>
@@ -1194,7 +1229,7 @@ export default function App() {
         pageNumber={creatorTargetPage}
         defaultName={
           creatorTargetPage === 1
-            ? 'Me'
+            ? bookStudentName.trim() || 'Me'
             : pages[creatorTargetPage - 1]?.friendName || `Friend ${creatorTargetPage}`
         }
         bodies={config.bodies}

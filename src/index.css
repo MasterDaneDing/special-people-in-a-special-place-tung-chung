@@ -173,6 +173,7 @@ textarea {
 
 .anim-dance-hop {
   animation: danceHop 1.0s ease-in-out infinite;
+  transform-origin: center bottom;
 }
 
 .anim-dance-body {
@@ -192,6 +193,30 @@ textarea {
 .no-scrollbar {
   -ms-overflow-style: none;
   scrollbar-width: none;
+}
+
+/* Visible horizontal scrollbar for the Tung Chung places strip */
+.places-strip-scroll {
+  scrollbar-width: auto;
+  scrollbar-color: #3a2e28 #ffe9a8;
+  padding-bottom: 6px;
+}
+.places-strip-scroll::-webkit-scrollbar {
+  height: 14px;
+  display: block;
+}
+.places-strip-scroll::-webkit-scrollbar-track {
+  background: #ffe9a8;
+  border: 2px solid #3a2e28;
+  border-radius: 8px;
+}
+.places-strip-scroll::-webkit-scrollbar-thumb {
+  background: #3a2e28;
+  border-radius: 8px;
+  border: 2px solid #ffe9a8;
+}
+.places-strip-scroll::-webkit-scrollbar-thumb:hover {
+  background: #1f1815;
 }
 
 @media (prefers-reduced-motion: reduce) {

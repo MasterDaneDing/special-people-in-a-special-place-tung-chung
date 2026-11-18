@@ -56,6 +56,12 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
   const [brushSize, setBrushSize] = useState(11);
   const [tool, setTool] = useState<DrawTool>('pencil');
   const [emptyWarning, setEmptyWarning] = useState(false);
+  const [drawCursor, setDrawCursor] = useState<{
+    x: number;
+    y: number;
+    size: number;
+    visible: boolean;
+  }>({ x: 0, y: 0, size: 12, visible: false });
 
   const drawingStateRef = useRef<{
     active: boolean;
@@ -127,6 +133,23 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     };
   };
 
+  const updateDrawCursor = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (e.pointerType !== 'mouse' && e.pointerType !== 'pen') {
+      setDrawCursor((c) => (c.visible ? { ...c, visible: false } : c));
+      return;
+    }
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const scale = rect.width / canvas.width;
+    setDrawCursor({
+      x: e.clientX - rect.left,
+      y: e.clientY - rect.top,
+      size: Math.max(10, brushSize * scale),
+      visible: true,
+    });
+  };
+
   const applyStrokeStyle = (ctx: CanvasRenderingContext2D) => {
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
@@ -165,10 +188,13 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
       points: [{ x: pt.x, y: pt.y }],
     };
 
-    applyStrokeStyle(ctx);
-    ctx.beginPath();
-    ctx.arc(pt.x, pt.y, brushSize / 2, 0, Math.PI * 2);
-    ctx.fill();
+    // Fill draws a closed freehand shape on pointer up, not a circle stamp.
+    if (tool !== 'fill') {
+      applyStrokeStyle(ctx);
+      ctx.beginPath();
+      ctx.arc(pt.x, pt.y, brushSize / 2, 0, Math.PI * 2);
+      ctx.fill();
+    }
   };
 
   const handlePointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
@@ -205,32 +231,32 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     const pre = historyRef.current[historyRef.current.length - 1];
     if (pre) ctx.putImageData(pre, 0, 0);
 
-    applyStrokeStyle(ctx);
-    if (points.length < 2) {
-      const p = points[0];
-      if (!p) return;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, brushSize / 2, 0, Math.PI * 2);
-      ctx.fill();
+    // A single tap is not a shape — do not stamp a circle.
+    if (points.length < 3) {
       return;
     }
 
+    ctx.save();
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.fillStyle = color;
+    ctx.strokeStyle = '#000000';
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = Math.max(4, brushSize * 0.55);
+
     ctx.beginPath();
     ctx.moveTo(points[0].x, points[0].y);
-    if (points.length === 2) {
-      ctx.lineTo(points[1].x, points[1].y);
-    } else {
-      for (let i = 1; i < points.length - 1; i++) {
-        const midX = (points[i].x + points[i + 1].x) / 2;
-        const midY = (points[i].y + points[i + 1].y) / 2;
-        ctx.quadraticCurveTo(points[i].x, points[i].y, midX, midY);
-      }
-      const last = points[points.length - 1];
-      ctx.lineTo(last.x, last.y);
+    for (let i = 1; i < points.length - 1; i++) {
+      const midX = (points[i].x + points[i + 1].x) / 2;
+      const midY = (points[i].y + points[i + 1].y) / 2;
+      ctx.quadraticCurveTo(points[i].x, points[i].y, midX, midY);
     }
+    const last = points[points.length - 1];
+    ctx.lineTo(last.x, last.y);
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
+    ctx.restore();
   };
 
   const handlePointerUp = (e: React.PointerEvent<HTMLCanvasElement>) => {
@@ -406,11 +432,38 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
           width={canvasWidth}
           height={canvasHeight}
           onPointerDown={handlePointerDown}
-          onPointerMove={handlePointerMove}
+          onPointerMove={(e) => {
+            updateDrawCursor(e);
+            handlePointerMove(e);
+          }}
           onPointerUp={handlePointerUp}
           onPointerCancel={handlePointerUp}
-          className="relative z-10 w-full h-full block touch-none cursor-crosshair"
+          onPointerEnter={updateDrawCursor}
+          onPointerLeave={() =>
+            setDrawCursor((c) => ({ ...c, visible: false }))
+          }
+          className={`relative z-10 w-full h-full block touch-none ${
+            drawCursor.visible ? 'cursor-none' : 'cursor-crosshair'
+          }`}
         />
+        {drawCursor.visible && (
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute z-20 rounded-full"
+            style={{
+              left: drawCursor.x,
+              top: drawCursor.y,
+              width: drawCursor.size,
+              height: drawCursor.size,
+              transform: 'translate(-50%, -50%)',
+              background:
+                tool === 'eraser' ? 'transparent' : 'rgba(26, 18, 14, 0.88)',
+              border: '2px solid #1a120e',
+              boxShadow:
+                '0 0 0 3px rgba(255,255,255,0.95), 0 0 6px 2px rgba(255,255,255,0.7)',
+            }}
+          />
+        )}
       </div>
 
       <div className="flex flex-wrap items-center justify-center gap-1.5 sm:gap-2">

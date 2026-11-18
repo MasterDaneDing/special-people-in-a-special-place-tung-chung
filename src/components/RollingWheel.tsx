@@ -29,11 +29,13 @@ export function RollingWheel<T extends string>({
     startY: number;
     startIndex: number;
     moved: boolean;
+    captured: boolean;
   }>({
     pointerId: null,
     startY: 0,
     startIndex: selectedIndex,
     moved: false,
+    captured: false,
   });
 
   const step = (delta: number) => {
@@ -43,12 +45,13 @@ export function RollingWheel<T extends string>({
 
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     e.stopPropagation();
-    e.currentTarget.setPointerCapture(e.pointerId);
+    // Delay capture until the pointer actually moves so a tap can open the vocab card.
     dragRef.current = {
       pointerId: e.pointerId,
       startY: e.clientY,
       startIndex: selectedIndex,
       moved: false,
+      captured: false,
     };
     setDragOffset(0);
   };
@@ -56,9 +59,18 @@ export function RollingWheel<T extends string>({
   const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
     if (dragRef.current.pointerId !== e.pointerId) return;
     const dy = e.clientY - dragRef.current.startY;
-    if (Math.abs(dy) > 4) {
+    if (Math.abs(dy) > 8) {
       dragRef.current.moved = true;
+      if (!dragRef.current.captured) {
+        try {
+          e.currentTarget.setPointerCapture(e.pointerId);
+        } catch {
+          // ignore
+        }
+        dragRef.current.captured = true;
+      }
     }
+    if (!dragRef.current.moved) return;
     setDragOffset(dy);
 
     const stepsMoved = Math.round(-dy / ROW_HEIGHT);
@@ -130,6 +142,10 @@ export function RollingWheel<T extends string>({
           <button
             type="button"
             onClick={(e) => {
+              e.stopPropagation();
+              if (!dragRef.current.moved) onValueClick(value);
+            }}
+            onPointerUp={(e) => {
               e.stopPropagation();
               if (!dragRef.current.moved) onValueClick(value);
             }}

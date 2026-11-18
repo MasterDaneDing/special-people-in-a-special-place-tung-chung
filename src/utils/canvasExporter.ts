@@ -1,3 +1,4 @@
+import { jsPDF } from 'jspdf';
 import { Character, DrawnObject, PageState, PlaceAsset } from '../types';
 import { getPageSentence } from './storyHelpers';
 import { CHICKEN_PIE_TTF_BASE64 } from './chickenPieFont';
@@ -459,6 +460,201 @@ export function downloadStoryBackupHtml(
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = `Tung-Chung-Storybook-${(studentName || 'Student').replace(/\s+/g, '_')}.html`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+
+
+export function sanitizeStoryPdfFileName(
+  studentName: string,
+  studentClass: string
+): string {
+  const clean = (value: string, fallback: string) => {
+    const trimmed = (value || '').replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim();
+    return trimmed || fallback;
+  };
+  return `${clean(studentName, 'Student')}_${clean(studentClass, 'Class')}_Tung Chung.pdf`;
+}
+
+function dataUrlToJpeg(dataUrl: string, quality = 0.86): Promise<string> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const ctx = canvas.getContext('2d')!;
+      ctx.fillStyle = '#fffaf0';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0);
+      resolve(canvas.toDataURL('image/jpeg', quality));
+    };
+    img.onerror = () => resolve(dataUrl);
+    img.src = dataUrl;
+  });
+}
+
+async function renderOpeningPageDataUrl(
+  studentName: string,
+  studentClass: string,
+  coverBgSrc?: string
+): Promise<string> {
+  const canvas = document.createElement('canvas');
+  canvas.width = STAGE_WIDTH;
+  canvas.height = STAGE_HEIGHT;
+  const ctx = canvas.getContext('2d')!;
+
+  ctx.fillStyle = '#fff5e1';
+  ctx.fillRect(0, 0, STAGE_WIDTH, STAGE_HEIGHT);
+
+  // Outer storybook frame
+  ctx.fillStyle = '#fffaf0';
+  roundRectPath(ctx, 36, 28, STAGE_WIDTH - 72, STAGE_HEIGHT - 56, 28);
+  ctx.fill();
+  ctx.lineWidth = 8;
+  ctx.strokeStyle = '#3a2e28';
+  ctx.stroke();
+
+  // Title banner
+  ctx.save();
+  ctx.beginPath();
+  roundRectPath(ctx, 36, 28, STAGE_WIDTH - 72, 168, 28);
+  ctx.clip();
+  ctx.fillStyle = '#ffd93d';
+  ctx.fillRect(36, 28, STAGE_WIDTH - 72, 168);
+  ctx.restore();
+  ctx.beginPath();
+  ctx.moveTo(36, 196);
+  ctx.lineTo(STAGE_WIDTH - 36, 196);
+  ctx.lineWidth = 6;
+  ctx.strokeStyle = '#3a2e28';
+  ctx.stroke();
+
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#3a2e28';
+  ctx.font = "24px 'Chicken Pie', 'Fredoka', sans-serif";
+  ctx.fillText('Interactive Picture Book', STAGE_WIDTH / 2, 70);
+  ctx.font = "bold 48px 'Chicken Pie', 'Fredoka', sans-serif";
+  ctx.fillText('Special People in a Special Place:', STAGE_WIDTH / 2, 118);
+  ctx.fillStyle = '#dc2626';
+  ctx.font = "bold 52px 'Chicken Pie', 'Fredoka', sans-serif";
+  ctx.fillText('Tung Chung!', STAGE_WIDTH / 2, 170);
+
+  // Optional scene strip
+  if (coverBgSrc) {
+    const bg = await loadImageSafe(coverBgSrc);
+    if (bg) {
+      const stripX = 80;
+      const stripY = 220;
+      const stripW = STAGE_WIDTH - 160;
+      const stripH = 250;
+      ctx.save();
+      roundRectPath(ctx, stripX, stripY, stripW, stripH, 18);
+      ctx.clip();
+      ctx.translate(stripX, stripY);
+      drawCoverImage(ctx, bg, stripW, stripH);
+      ctx.restore();
+      ctx.lineWidth = 4;
+      ctx.strokeStyle = '#3a2e28';
+      roundRectPath(ctx, stripX, stripY, stripW, stripH, 18);
+      ctx.stroke();
+    }
+  }
+
+  // Name / Class fields
+  const nameValue = (studentName || '').trim() || '_______________';
+  const classValue = (studentClass || '').trim() || '___';
+
+  ctx.fillStyle = '#3a2e28';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.font = "bold 36px 'Chicken Pie', 'Fredoka', sans-serif";
+
+  const fieldsY = 560;
+  ctx.fillText('Name:', 140, fieldsY);
+  ctx.fillStyle = '#ffffff';
+  roundRectPath(ctx, 260, fieldsY - 36, 520, 72, 14);
+  ctx.fill();
+  ctx.lineWidth = 4;
+  ctx.strokeStyle = '#3a2e28';
+  ctx.stroke();
+  ctx.fillStyle = '#3a2e28';
+  ctx.font = "bold 32px 'Chicken Pie', 'Fredoka', sans-serif";
+  ctx.fillText(nameValue, 278, fieldsY);
+
+  ctx.font = "bold 36px 'Chicken Pie', 'Fredoka', sans-serif";
+  ctx.fillText('Class:', 810, fieldsY);
+  ctx.fillStyle = '#ffffff';
+  roundRectPath(ctx, 930, fieldsY - 36, 210, 72, 14);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = '#3a2e28';
+  ctx.font = "bold 32px 'Chicken Pie', 'Fredoka', sans-serif";
+  ctx.textAlign = 'center';
+  ctx.fillText(classValue, 1035, fieldsY);
+
+  ctx.font = "24px 'Chicken Pie', 'Fredoka', sans-serif";
+  ctx.fillStyle = '#3a2e28';
+  ctx.fillText('A storybook by a special person in Tung Chung', STAGE_WIDTH / 2, 650);
+
+  return canvas.toDataURL('image/png');
+}
+
+export interface StoryPdfResult {
+  blob: Blob;
+  fileName: string;
+  pdfBase64: string;
+}
+
+export async function buildStoryPdf(options: {
+  studentName: string;
+  studentClass: string;
+  pagePngs: string[];
+  coverBgSrc?: string;
+}): Promise<StoryPdfResult> {
+  const fileName = sanitizeStoryPdfFileName(
+    options.studentName,
+    options.studentClass
+  );
+  const opening = await renderOpeningPageDataUrl(
+    options.studentName,
+    options.studentClass,
+    options.coverBgSrc
+  );
+
+  const pageWidth = 1280;
+  const pageHeight = 720;
+  const pdf = new jsPDF({
+    orientation: 'landscape',
+    unit: 'px',
+    format: [pageWidth, pageHeight],
+    hotfixes: ['px_scaling'],
+    compress: true,
+  });
+
+  const openingJpeg = await dataUrlToJpeg(opening, 0.9);
+  pdf.addImage(openingJpeg, 'JPEG', 0, 0, pageWidth, pageHeight, undefined, 'FAST');
+
+  for (const pagePng of options.pagePngs) {
+    pdf.addPage([pageWidth, pageHeight], 'landscape');
+    const jpeg = await dataUrlToJpeg(pagePng, 0.86);
+    pdf.addImage(jpeg, 'JPEG', 0, 0, pageWidth, pageHeight, undefined, 'FAST');
+  }
+
+  const blob = pdf.output('blob');
+  const dataUri = pdf.output('datauristring');
+  const comma = dataUri.indexOf(',');
+  const pdfBase64 = comma >= 0 ? dataUri.slice(comma + 1) : dataUri;
+
+  return { blob, fileName, pdfBase64 };
+}
+
+export function downloadStoryPdf(result: StoryPdfResult): void {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(result.blob);
+  a.download = result.fileName;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
