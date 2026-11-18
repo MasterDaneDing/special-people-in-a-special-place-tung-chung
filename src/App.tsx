@@ -48,6 +48,7 @@ import { CharacterCreatorModal } from './components/CharacterCreatorModal';
 import { TeacherModeModal } from './components/TeacherModeModal';
 import { DrawObjectModal } from './components/DrawObjectModal';
 import { InteractiveProp } from './components/InteractiveProp';
+import { VocabCard } from './components/VocabCard';
 
 export default function App() {
   const [config, setConfig] = useState<StorybookConfig>(() => getDefaultConfig());
@@ -69,6 +70,7 @@ export default function App() {
   const [teacherOpen, setTeacherOpen] = useState(false);
   const [placesStripOpen, setPlacesStripOpen] = useState(false);
   const [editingPlaceName, setEditingPlaceName] = useState(false);
+  const [vocabAdjective, setVocabAdjective] = useState<Adjective | null>(null);
 
   // Toast for double-tap background switching
   const [bgToast, setBgToast] = useState<string | null>(null);
@@ -569,6 +571,7 @@ export default function App() {
             items={ADJECTIVES}
             value={currentPage.adjective}
             onChange={(val) => updatePage(1, { adjective: val as Adjective })}
+            onValueClick={(val) => setVocabAdjective(val as Adjective)}
             ariaLabel="personality word"
             accentBg="bg-[#ffd93d]"
             minWidthClass="min-w-[154px]"
@@ -616,6 +619,7 @@ export default function App() {
         items={ADJECTIVES}
         value={currentPage.adjective}
         onChange={(val) => updatePage(p, { adjective: val as Adjective })}
+        onValueClick={(val) => setVocabAdjective(val as Adjective)}
         ariaLabel="personality word"
         accentBg="bg-[#ffd93d]"
         minWidthClass="min-w-[152px]"
@@ -1210,6 +1214,13 @@ export default function App() {
         onResetDefaults={() => setConfig(getDefaultConfig())}
         onClose={() => setTeacherOpen(false)}
       />
+
+      {vocabAdjective && (
+        <VocabCard
+          adjective={vocabAdjective}
+          onClose={() => setVocabAdjective(null)}
+        />
+      )}
 
       <DrawObjectModal
         isOpen={drawObjectOpen}

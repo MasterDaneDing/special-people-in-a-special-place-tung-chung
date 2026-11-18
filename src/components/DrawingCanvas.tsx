@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Check, Eraser, Paintbrush, Trash2, Undo2 } from 'lucide-react';
+import { Check, Eraser, PaintBucket, Pencil, Trash2, Undo2 } from 'lucide-react';
 
 interface DrawingCanvasProps {
   mode: 'face' | 'object';
@@ -37,6 +37,8 @@ const SKIN_BASES = [
 
 const BRUSH_SIZES = [5, 11, 18, 28];
 
+type DrawTool = 'pencil' | 'fill' | 'eraser';
+
 export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
   mode,
   canvasWidth = mode === 'face' ? 380 : 480,
@@ -52,7 +54,7 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
 
   const [color, setColor] = useState('#3a2e28');
   const [brushSize, setBrushSize] = useState(11);
-  const [isEraser, setIsEraser] = useState(false);
+  const [tool, setTool] = useState<DrawTool>('pencil');
   const [emptyWarning, setEmptyWarning] = useState(false);
 
   const drawingStateRef = useRef<{
@@ -62,6 +64,7 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     lastY: number;
     midX: number;
     midY: number;
+    points: { x: number; y: number }[];
   }>({
     active: false,
     pointerId: null,
@@ -69,6 +72,7 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     lastY: 0,
     midX: 0,
     midY: 0,
+    points: [],
   });
 
   const pushHistory = () => {
@@ -127,7 +131,7 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     ctx.lineWidth = brushSize;
-    if (isEraser) {
+    if (tool === 'eraser') {
       ctx.globalCompositeOperation = 'destination-out';
       ctx.strokeStyle = 'rgba(0,0,0,1)';
       ctx.fillStyle = 'rgba(0,0,0,1)';
@@ -158,6 +162,7 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
       lastY: pt.y,
       midX: pt.x,
       midY: pt.y,
+      points: [{ x: pt.x, y: pt.y }],
     };
 
     applyStrokeStyle(ctx);
@@ -193,16 +198,58 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     drawingStateRef.current.lastY = pt.y;
     drawingStateRef.current.midX = newMidX;
     drawingStateRef.current.midY = newMidY;
+    drawingStateRef.current.points.push({ x: pt.x, y: pt.y });
+  };
+
+  const paintFilledStroke = (ctx: CanvasRenderingContext2D, points: { x: number; y: number }[]) => {
+    const pre = historyRef.current[historyRef.current.length - 1];
+    if (pre) ctx.putImageData(pre, 0, 0);
+
+    applyStrokeStyle(ctx);
+    if (points.length < 2) {
+      const p = points[0];
+      if (!p) return;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, brushSize / 2, 0, Math.PI * 2);
+      ctx.fill();
+      return;
+    }
+
+    ctx.beginPath();
+    ctx.moveTo(points[0].x, points[0].y);
+    if (points.length === 2) {
+      ctx.lineTo(points[1].x, points[1].y);
+    } else {
+      for (let i = 1; i < points.length - 1; i++) {
+        const midX = (points[i].x + points[i + 1].x) / 2;
+        const midY = (points[i].y + points[i + 1].y) / 2;
+        ctx.quadraticCurveTo(points[i].x, points[i].y, midX, midY);
+      }
+      const last = points[points.length - 1];
+      ctx.lineTo(last.x, last.y);
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
   };
 
   const handlePointerUp = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (drawingStateRef.current.pointerId !== e.pointerId) return;
+    const points = drawingStateRef.current.points;
     drawingStateRef.current.active = false;
     drawingStateRef.current.pointerId = null;
     try {
       e.currentTarget.releasePointerCapture(e.pointerId);
     } catch {
       // ignore
+    }
+
+    if (tool === 'fill') {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      if (!ctx) return;
+      paintFilledStroke(ctx, points);
     }
   };
 
@@ -368,13 +415,13 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
 
       <div className="flex flex-wrap items-center justify-center gap-1.5 sm:gap-2">
         {PALETTE.map((swatch) => {
-          const active = !isEraser && color === swatch.color;
+          const active = tool !== 'eraser' && color === swatch.color;
           return (
             <button
               key={swatch.color}
               type="button"
               onClick={() => {
-                setIsEraser(false);
+                setTool((current) => (current === 'eraser' ? 'pencil' : current));
                 setColor(swatch.color);
               }}
               aria-label={swatch.label}
@@ -419,20 +466,31 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
         <div className="flex items-center gap-1.5">
           <button
             type="button"
-            onClick={() => setIsEraser(false)}
+            onClick={() => setTool('pencil')}
             className={`h-11 px-3 rounded-xl border-2 border-[#3a2e28] font-bold text-sm flex items-center gap-1.5 ${
-              !isEraser ? 'bg-[#38bdf8] text-[#3a2e28]' : 'bg-white text-[#3a2e28]'
+              tool === 'pencil' ? 'bg-[#38bdf8] text-[#3a2e28]' : 'bg-white text-[#3a2e28]'
             }`}
           >
-            <Paintbrush className="w-4 h-4" />
-            <span>Draw</span>
+            <Pencil className="w-4 h-4" />
+            <span>Pencil</span>
           </button>
 
           <button
             type="button"
-            onClick={() => setIsEraser(true)}
+            onClick={() => setTool('fill')}
             className={`h-11 px-3 rounded-xl border-2 border-[#3a2e28] font-bold text-sm flex items-center gap-1.5 ${
-              isEraser ? 'bg-[#ff5946] text-white' : 'bg-white text-[#3a2e28]'
+              tool === 'fill' ? 'bg-[#ffd93d] text-[#3a2e28]' : 'bg-white text-[#3a2e28]'
+            }`}
+          >
+            <PaintBucket className="w-4 h-4" />
+            <span>Fill</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setTool('eraser')}
+            className={`h-11 px-3 rounded-xl border-2 border-[#3a2e28] font-bold text-sm flex items-center gap-1.5 ${
+              tool === 'eraser' ? 'bg-[#ff5946] text-white' : 'bg-white text-[#3a2e28]'
             }`}
           >
             <Eraser className="w-4 h-4" />

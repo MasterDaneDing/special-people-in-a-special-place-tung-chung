@@ -701,19 +701,9 @@ const PLACE_BACKGROUNDS = [
     src: "./Tung Chung Places/tung-chung-fort.jpg",
   },
   {
-    id: "tung-chung-promenade",
-    name: "Waterfront Promenade",
-    src: "./Tung Chung Places/tung-chung-promenade.jpg",
-  },
-  {
     id: "tung-chung-places-1",
-    name: "Hotel swimming pool",
+    name: "Caribbean Coast Swimming Pool",
     src: "./Tung Chung Places/Tung Chung Places (1).jpeg",
-  },
-  {
-    id: "tung-chung-places-17",
-    name: "Snack street shops",
-    src: "./Tung Chung Places/Tung Chung Places (17).jpeg",
   },
   {
     id: "tung-chung-places-18",
@@ -722,77 +712,77 @@ const PLACE_BACKGROUNDS = [
   },
   {
     id: "tung-chung-places-19",
-    name: "Yellow canopy bus terminus",
+    name: "Tung Chung Ferry Pier",
     src: "./Tung Chung Places/Tung Chung Places (19).jpeg",
   },
   {
     id: "tung-chung-places-20",
-    name: "Pink pier promenade",
+    name: "Tung Chung Promenade",
     src: "./Tung Chung Places/Tung Chung Places (20).jpeg",
   },
   {
     id: "tung-chung-places-21",
-    name: "Village courtyard",
+    name: "Chui Kwan Drive",
     src: "./Tung Chung Places/Tung Chung Places (21).jpeg",
   },
   {
     id: "tung-chung-places-22",
-    name: "Wet market butcher stall",
+    name: "Mun Tung Wet Market",
     src: "./Tung Chung Places/Tung Chung Places (22).jpeg",
   },
   {
     id: "tung-chung-places-23",
-    name: "Estate covered walkway",
+    name: "Mun Tung Estate",
     src: "./Tung Chung Places/Tung Chung Places (23).jpeg",
   },
   {
     id: "tung-chung-places-24",
-    name: "Mosque gate at night",
+    name: "Masjid Ismail",
     src: "./Tung Chung Places/Tung Chung Places (24).jpeg",
   },
   {
     id: "tung-chung-places-25",
-    name: "Sculpture plaza",
+    name: "Caribbean Coast",
     src: "./Tung Chung Places/Tung Chung Places (25).jpeg",
   },
   {
     id: "tung-chung-places-26",
-    name: "Musical fountain at night",
+    name: "Citygate Fountain",
     src: "./Tung Chung Places/Tung Chung Places (26).jpeg",
   },
   {
     id: "tung-chung-places-27",
-    name: "Station bus interchange",
+    name: "Cheung Tung Bus Terminal",
     src: "./Tung Chung Places/Tung Chung Places (27).jpeg",
   },
   {
     id: "tung-chung-places-28",
-    name: "Tower courtyard",
+    name: "Yu Nga Court",
     src: "./Tung Chung Places/Tung Chung Places (28).jpeg",
   },
   {
     id: "tung-chung-places-29",
-    name: "Cafe street stalls",
+    name: "Yat Tung Market Food Stalls",
     src: "./Tung Chung Places/Tung Chung Places (29).jpeg",
   },
   {
     id: "tung-chung-places-30",
-    name: "Old village alley",
+    name: "Ma Wan Chung",
     src: "./Tung Chung Places/Tung Chung Places (30).jpeg",
   },
   {
     id: "tung-chung-places-31",
-    name: "Service alley",
+    name: "Yat Tung Estate",
     src: "./Tung Chung Places/Tung Chung Places (31).jpeg",
   },
   {
     id: "tung-chung-places-32",
-    name: "Palm garden walk",
+    name: "Outside Yat Tung Estate",
     src: "./Tung Chung Places/Tung Chung Places (32).jpeg",
   },
   {
     id: "tung-chung-places-33",
-    name: "Street corner bus stop",
+    name: "Yat Tung Estate Bus Terminal",
     src: "./Tung Chung Places/Tung Chung Places (33).jpeg",
   },
 ];

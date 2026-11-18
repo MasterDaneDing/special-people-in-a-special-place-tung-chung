@@ -7,14 +7,14 @@ This update wires Charlie's real Drive assets into the Vite + React storybook so
 - **Fonts:** `CHICKEN Pie.ttf` and `CHICKEN Pie.otf` are now in `src/` (so `src/index.css` `@font-face` can load them) and in `public/` (for exported HTML or any canvas/public path). UI text already used `'Chicken Pie', 'Fredoka', sans-serif`; the face was not loading because the font files were missing from the original zip.
 - **Music:** Replaced the short 257 KB stand-in at `public/Tung Chung.mp3` with the full 999.2 KB Drive track. The dance-song path is unchanged (`./Tung Chung.mp3`).
 - **Bodies:** Copied all 77 Make-You sprites (`001.png`–`077.png`) into `public/make-you-bodies/`. The original 8 named outfits (Red Star Tunic, Sunny Overalls, etc.) are kept at the start of the list.
-- **Places:** Copied all 18 Drive photos that were in the folder (`Tung Chung Places (1).jpeg` and `(17)`–`(33).jpeg`) into `public/Tung Chung Places/`. Photos 2–16 were not in the Drive folder and were not invented. The original 4 illustrated backgrounds (Ngong Ping 360, Tung Chung Park, Tung Chung Fort, Waterfront Promenade) are visually distinct cartoon scenes, not compressed duplicates, so they are kept as well.
+- **Places:** Copied all 18 Drive photos that were in the folder (`Tung Chung Places (1).jpeg` and `(17)`–`(33).jpeg`) into `public/Tung Chung Places/`. Photos 2–16 were not in the Drive folder and were not invented. The original illustrated backgrounds for Ngong Ping 360, Tung Chung Park, and Tung Chung Fort are kept. The illustrated Waterfront Promenade image and the Snack street shops photo were later removed (see below).
 
 ## Config
 
 `public/config.js` and the fallbacks in `src/utils/storyHelpers.ts` now ship:
 
 - **85 bodies:** the 8 original outfits, then all 77 Make-You sprites, each with a short English outfit name.
-- **22 places:** the 4 original illustrated backgrounds, then the 18 Drive photos with friendly names (see below).
+- **20 places:** the 3 remaining illustrated backgrounds (Ngong Ping 360, Tung Chung Park, Tung Chung Fort), then 17 Drive photos with their real Tung Chung names (see below). Snack street shops and the illustrated Waterfront Promenade were removed.
 - `danceSongUrl` remains `./Tung Chung.mp3`.
 
 ## Neck anchors
@@ -27,28 +27,40 @@ All 77 Make-You sprites share one consistent layout: a front-facing body with th
 
 `src/utils/canvasExporter.ts` now uses Chicken Pie (with Fredoka as fallback) for the dance-video captions and for the standalone backup HTML. The exported HTML embeds the Chicken Pie TTF as a base64 `@font-face` so the file still looks right when opened on its own.
 
-## Place names for the 18 Drive photos
+## Place names
+
+The illustrated Waterfront Promenade (`tung-chung-promenade.jpg`) and Snack street shops (`Tung Chung Places (17).jpeg`) were removed, both the image files and their place entries. The remaining places were renamed to their real Tung Chung names. There are now 20 places in total.
 
 | File | Name |
 | --- | --- |
-| Tung Chung Places (1).jpeg | Hotel swimming pool |
-| Tung Chung Places (17).jpeg | Snack street shops |
+| ngong-ping-cable-car.jpg | Ngong Ping 360 & Bay |
+| tung-chung-park.jpg | Tung Chung Park |
+| tung-chung-fort.jpg | Tung Chung Fort |
+| Tung Chung Places (1).jpeg | Caribbean Coast Swimming Pool |
 | Tung Chung Places (18).jpeg | Yat Tung Shopping Centre |
-| Tung Chung Places (19).jpeg | Yellow canopy bus terminus |
-| Tung Chung Places (20).jpeg | Pink pier promenade |
-| Tung Chung Places (21).jpeg | Village courtyard |
-| Tung Chung Places (22).jpeg | Wet market butcher stall |
-| Tung Chung Places (23).jpeg | Estate covered walkway |
-| Tung Chung Places (24).jpeg | Mosque gate at night |
-| Tung Chung Places (25).jpeg | Sculpture plaza |
-| Tung Chung Places (26).jpeg | Musical fountain at night |
-| Tung Chung Places (27).jpeg | Station bus interchange |
-| Tung Chung Places (28).jpeg | Tower courtyard |
-| Tung Chung Places (29).jpeg | Cafe street stalls |
-| Tung Chung Places (30).jpeg | Old village alley |
-| Tung Chung Places (31).jpeg | Service alley |
-| Tung Chung Places (32).jpeg | Palm garden walk |
-| Tung Chung Places (33).jpeg | Street corner bus stop |
+| Tung Chung Places (19).jpeg | Tung Chung Ferry Pier |
+| Tung Chung Places (20).jpeg | Tung Chung Promenade |
+| Tung Chung Places (21).jpeg | Chui Kwan Drive |
+| Tung Chung Places (22).jpeg | Mun Tung Wet Market |
+| Tung Chung Places (23).jpeg | Mun Tung Estate |
+| Tung Chung Places (24).jpeg | Masjid Ismail |
+| Tung Chung Places (25).jpeg | Caribbean Coast |
+| Tung Chung Places (26).jpeg | Citygate Fountain |
+| Tung Chung Places (27).jpeg | Cheung Tung Bus Terminal |
+| Tung Chung Places (28).jpeg | Yu Nga Court |
+| Tung Chung Places (29).jpeg | Yat Tung Market Food Stalls |
+| Tung Chung Places (30).jpeg | Ma Wan Chung |
+| Tung Chung Places (31).jpeg | Yat Tung Estate |
+| Tung Chung Places (32).jpeg | Outside Yat Tung Estate |
+| Tung Chung Places (33).jpeg | Yat Tung Estate Bus Terminal |
+
+## Drawing tools
+
+The drawing pad (for faces and objects) now has two paint tools plus the eraser: **Pencil** is the default freehand stroke, and **Fill** closes the shape you just drew and fills its interior with the selected colour. Fill does not stamp a circle; the existing face-only Quick Face Base remains a separate convenience.
+
+## Adjective vocab cards
+
+Tapping the selected personality word in the yellow centre of an adjective wheel (a tap, not a drag, and not the chevrons) opens a vocab card with a short definition and a kawaii illustration from `public/vocab-cards/`.
 
 ## Still missing
 

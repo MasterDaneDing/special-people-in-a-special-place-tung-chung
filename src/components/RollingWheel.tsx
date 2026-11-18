@@ -8,6 +8,7 @@ interface RollingWheelProps<T extends string> {
   ariaLabel: string;
   accentBg?: string;
   minWidthClass?: string;
+  onValueClick?: (value: T) => void;
 }
 
 const ROW_HEIGHT = 44;
@@ -19,6 +20,7 @@ export function RollingWheel<T extends string>({
   ariaLabel,
   accentBg = 'bg-[#ffd93d]',
   minWidthClass = 'min-w-[148px]',
+  onValueClick,
 }: RollingWheelProps<T>) {
   const selectedIndex = Math.max(0, items.indexOf(value));
   const [dragOffset, setDragOffset] = useState(0);
@@ -124,16 +126,35 @@ export function RollingWheel<T extends string>({
         </button>
 
         {/* Center active drum window */}
-        <div
-          className={`w-full h-[40px] rounded-xl border-[2.5px] border-[#3a2e28] ${accentBg} flex items-center justify-center px-2.5 shadow-inner`}
-          style={{
-            transform: `translateY(${subtleShift * 0.25}px)`,
-          }}
-        >
-          <span className="text-lg sm:text-xl font-bold text-[#3a2e28] whitespace-nowrap truncate">
-            {value}
-          </span>
-        </div>
+        {onValueClick ? (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (!dragRef.current.moved) onValueClick(value);
+            }}
+            aria-label={`What does ${value} mean?`}
+            className={`w-full h-[40px] rounded-xl border-[2.5px] border-[#3a2e28] ${accentBg} flex items-center justify-center px-2.5 shadow-inner cursor-pointer`}
+            style={{
+              transform: `translateY(${subtleShift * 0.25}px)`,
+            }}
+          >
+            <span className="text-lg sm:text-xl font-bold text-[#3a2e28] whitespace-nowrap truncate">
+              {value}
+            </span>
+          </button>
+        ) : (
+          <div
+            className={`w-full h-[40px] rounded-xl border-[2.5px] border-[#3a2e28] ${accentBg} flex items-center justify-center px-2.5 shadow-inner`}
+            style={{
+              transform: `translateY(${subtleShift * 0.25}px)`,
+            }}
+          >
+            <span className="text-lg sm:text-xl font-bold text-[#3a2e28] whitespace-nowrap truncate">
+              {value}
+            </span>
+          </div>
+        )}
 
         {/* Bottom drum row */}
         <button
