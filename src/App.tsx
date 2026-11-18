@@ -458,8 +458,6 @@ export default function App() {
         type: 'story',
         studentName,
         studentClass,
-        storyText: rendered.storyText,
-        pages: rendered.pagePngs,
         pdfBase64: pdf.pdfBase64,
         pdfFileName: pdf.fileName,
         mimeType: 'application/pdf',
