@@ -88,8 +88,10 @@ export default function App() {
 
   // Export States (Save Story & Save Music Video)
   const [storySaving, setStorySaving] = useState(false);
+  const [storyDownloading, setStoryDownloading] = useState(false);
+  const [storyPhase, setStoryPhase] = useState<'idle' | 'rendering' | 'uploading'>('idle');
   const [storyProgress, setStoryProgress] = useState(0);
-  const [storyBanner, setStoryBanner] = useState<string | null>(null);
+  const [storyBanner, setStoryBanner] = useState<{ kind: 'success' | 'error'; text: string } | null>(null);
   const [storyBackup, setStoryBackup] = useState<{
     studentName: string;
     studentClass: string;
@@ -423,9 +425,20 @@ export default function App() {
     }
   };
 
+  useEffect(() => {
+    if (!storySaving) return;
+    const onLeave = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', onLeave);
+    return () => window.removeEventListener('beforeunload', onLeave);
+  }, [storySaving]);
+
   const handleSaveStory = async () => {
-    if (storySaving) return;
+    if (storySaving || storyDownloading) return;
     setStorySaving(true);
+    setStoryPhase('rendering');
     setStoryProgress(0);
     setStoryBanner(null);
 
@@ -452,8 +465,10 @@ export default function App() {
         sentences: rendered.sentences,
         pdf,
       });
-      downloadStoryPdf(pdf);
 
+      // Upload only. Do not open or download the PDF here: on iPad that can
+      // replace this page and cancel the Google Drive request.
+      setStoryPhase('uploading');
       await postToGoogleAppsScript(config.googleAppsScriptUrl, {
         type: 'story',
         studentName,
@@ -463,16 +478,65 @@ export default function App() {
         mimeType: 'application/pdf',
       });
 
-      setStoryBanner(
-        `Awesome, ${studentName}! Your storybook PDF was downloaded and sent to Google Drive!`
-      );
+      setStoryBanner({
+        kind: 'success',
+        text: `Saved to Google Drive, ${studentName}! Please wait for this message before leaving the page.`,
+      });
     } catch (err) {
       console.error(err);
-      setStoryBanner(
-        'Could not send the storybook to Google Drive, but your PDF is ready to download below!'
-      );
+      const detail = err instanceof Error && err.message ? err.message : 'Please stay on this page and try again.';
+      setStoryBanner({
+        kind: 'error',
+        text: `Could not send the storybook to Google Drive. ${detail}`,
+      });
     } finally {
       setStorySaving(false);
+      setStoryPhase('idle');
+    }
+  };
+
+  const handleDownloadStoryPdf = async () => {
+    if (storySaving || storyDownloading) return;
+    setStoryDownloading(true);
+
+    try {
+      let pdf = storyBackup?.pdf;
+      if (!pdf) {
+        setStoryPhase('rendering');
+        setStoryProgress(0);
+        const rendered = await renderAllStoryPages(
+          pages,
+          characters,
+          config.places,
+          drawnObjects,
+          (pct) => setStoryProgress(pct)
+        );
+        pdf = await buildStoryPdf({
+          studentName,
+          studentClass,
+          pagePngs: rendered.pagePngs,
+          coverBgSrc: config.places[0]?.src,
+        });
+        setStoryBackup({
+          studentName,
+          studentClass,
+          pagePngs: rendered.pagePngs,
+          sentences: rendered.sentences,
+          pdf,
+        });
+        setStoryPhase('idle');
+      }
+      await downloadStoryPdf(pdf);
+    } catch (err) {
+      console.error(err);
+      const detail = err instanceof Error && err.message ? err.message : 'Please try again.';
+      setStoryBanner({
+        kind: 'error',
+        text: `Could not download the PDF. ${detail}`,
+      });
+    } finally {
+      setStoryDownloading(false);
+      setStoryPhase('idle');
     }
   };
 
@@ -1126,7 +1190,7 @@ export default function App() {
                 Finish &amp; Share Your Tung Chung Storybook!
               </h2>
               <p className="text-base font-medium text-[#3a2e28]/80">
-                Save all 12 illustrated pages and record your dancing music video with Tung Chung.mp3.
+                Save My Story sends your PDF to Google Drive. Use Download PDF if you want a copy on the iPad. Stay on this page until you see a Saved message.
               </p>
             </div>
 
@@ -1135,14 +1199,18 @@ export default function App() {
               <div className="rounded-3xl border-[3px] border-[#3a2e28] bg-white p-4 flex flex-col gap-3">
                 <button
                   type="button"
-                  disabled={storySaving}
+                  disabled={storySaving || storyDownloading}
                   onClick={handleSaveStory}
-                  className="storybook-btn w-full px-6 py-4 rounded-2xl bg-[#4ade80] text-[#3a2e28] text-xl font-bold flex items-center justify-center gap-2.5"
+                  className="storybook-btn w-full px-6 py-4 rounded-2xl bg-[#4ade80] text-[#3a2e28] text-xl font-bold flex items-center justify-center gap-2.5 disabled:opacity-70"
                 >
                   {storySaving ? (
                     <>
                       <Loader2 className="w-6 h-6 animate-spin" />
-                      <span>Rendering Pages... {storyProgress}%</span>
+                      <span>
+                        {storyPhase === 'uploading'
+                          ? 'Uploading to Google Drive...'
+                          : `Rendering Pages... ${storyProgress}%`}
+                      </span>
                     </>
                   ) : (
                     <>
@@ -1153,21 +1221,42 @@ export default function App() {
                 </button>
 
                 {storyBanner && (
-                  <div className="rounded-2xl border-2 border-[#3a2e28] bg-[#dcfce7] px-4 py-2.5 text-sm sm:text-base font-bold text-[#3a2e28]">
-                    {storyBanner}
+                  <div
+                    className={`rounded-2xl border-2 border-[#3a2e28] px-4 py-2.5 text-sm sm:text-base font-bold text-[#3a2e28] ${
+                      storyBanner.kind === 'error' ? 'bg-[#fecaca]' : 'bg-[#dcfce7]'
+                    }`}
+                    role="status"
+                    aria-live="polite"
+                  >
+                    {storyBanner.text}
                   </div>
                 )}
 
-                {storyBackup && (
-                  <button
-                    type="button"
-                    onClick={() => downloadStoryPdf(storyBackup.pdf)}
-                    className="storybook-btn w-full px-4 py-2.5 rounded-2xl bg-[#fff4dd] text-base font-bold text-[#3a2e28] flex items-center justify-center gap-2"
-                  >
-                    <Download className="w-5 h-5" />
-                    <span>Download Storybook PDF</span>
-                  </button>
-                )}
+                <button
+                  type="button"
+                  disabled={storySaving || storyDownloading}
+                  onClick={handleDownloadStoryPdf}
+                  className="storybook-btn w-full px-4 py-2.5 rounded-2xl bg-[#fff4dd] text-base font-bold text-[#3a2e28] flex items-center justify-center gap-2 disabled:opacity-70"
+                >
+                  {storyDownloading ? (
+                    <>
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      <span>
+                        {storyPhase === 'rendering'
+                          ? `Preparing PDF... ${storyProgress}%`
+                          : 'Downloading PDF...'}
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <Download className="w-5 h-5" />
+                      <span>Download PDF</span>
+                    </>
+                  )}
+                </button>
+                <p className="text-sm font-medium text-[#3a2e28]/70 text-center">
+                  Download PDF keeps a copy on the iPad. It does not send your story to Google Drive.
+                </p>
               </div>
 
               {/* Save My Music Video Card */}

@@ -1,5 +1,12 @@
 # Changes — Special People in a Special Place: Tung Chung!
 
+## Save My Story uploads only, with a separate Download PDF button
+
+- **Save My Story** now waits for a confirmed Google Drive upload of the story PDF only (`Name_Class_Tung Chung.pdf`). It no longer opens or downloads the PDF as part of saving, because on iPad that could leave the website and cancel the upload.
+- The button shows **Uploading to Google Drive...** after the pages are rendered, then a green **Saved to Google Drive** message or a red error. Stay on the page until the Saved message appears.
+- A separate **Download PDF** button is always available on page 12. It keeps a copy on the iPad and does not send anything to Drive. The download opens in a new tab if needed, so the game page stays open.
+- Drive upload now succeeds only when Apps Script returns `{ status: "ok" }`. Extra text or link files are not sent.
+
 ## Classroom play fixes (cover, places, drawing, PDF)
 
 - **Places slider:** The place picker keeps a visible scrollbar and has left/right arrow buttons. The scrollbar is no longer hidden on that strip. Place names themselves are unchanged.

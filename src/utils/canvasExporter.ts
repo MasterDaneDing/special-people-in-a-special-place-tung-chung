@@ -387,26 +387,44 @@ export async function postToGoogleAppsScript(
     throw new Error('Google Drive export is not set up yet.');
   }
 
-  const resp = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    body: JSON.stringify(payload),
-  });
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), 120_000);
 
-  const text = await resp.text();
-  let data: { status?: string; message?: string; error?: string } | null = null;
-  if (text) {
-    try {
-      data = JSON.parse(text) as { status?: string; message?: string; error?: string };
-    } catch {
-      data = null;
+  try {
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+      redirect: 'follow',
+    });
+
+    const text = await resp.text();
+    let data: { status?: string; message?: string; error?: string } | null = null;
+    if (text) {
+      try {
+        data = JSON.parse(text) as { status?: string; message?: string; error?: string };
+      } catch {
+        data = null;
+      }
     }
-  }
 
-  if (!resp.ok || data?.status === 'error' || data?.error) {
-    throw new Error(
-      data?.message || data?.error || `Drive upload failed (${resp.status})`
-    );
+    // Only treat a confirmed Apps Script success as saved. An empty or
+    // unreadable response is a failure, even if the HTTP status looks OK.
+    if (!resp.ok || !data || data.status !== 'ok' || data.error) {
+      throw new Error(
+        data?.message || data?.error || `Drive upload failed (${resp.status})`
+      );
+    }
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'AbortError') {
+      throw new Error(
+        'The Google Drive upload timed out. Please stay on this page and try again.'
+      );
+    }
+    throw err;
+  } finally {
+    window.clearTimeout(timeoutId);
   }
 }
 
@@ -667,13 +685,25 @@ export async function buildStoryPdf(options: {
   return { blob, fileName, pdfBase64 };
 }
 
-export function downloadStoryPdf(result: StoryPdfResult): void {
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(result.blob);
-  a.download = result.fileName;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
+export async function downloadStoryPdf(result: StoryPdfResult): Promise<void> {
+  // Stay on the game page. On iPad Safari, <a download> is often ignored and
+  // a same-tab blob navigation would unload the site and abort any upload.
+  // Open the blob in a new tab if the browser will not download it in place.
+  const objectUrl = URL.createObjectURL(result.blob);
+  try {
+    const a = document.createElement('a');
+    a.href = objectUrl;
+    a.download = result.fileName;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    a.type = 'application/pdf';
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  } finally {
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+  }
 }
 
 export interface DanceVideoResult {
