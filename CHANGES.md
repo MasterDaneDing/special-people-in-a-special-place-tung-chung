@@ -1,5 +1,13 @@
 # Changes — Special People in a Special Place: Tung Chung!
 
+## Music video Drive save, and one Drive save of each type unless a teacher unlocks another
+
+- **Save My Music Video** now waits for a confirmed Google Drive upload of the music video only (`Name_Class_Music Video.mp4`, or `.webm` if that is what the iPad records). It no longer shows a download link or opens the video until Drive answers `{ status: "ok" }`, because on iPad that could leave the website and cancel the upload. The button shows **Recording Dance Video...**, then **Uploading to Google Drive...**, then a green **Saved to Google Drive** message or a red error. Stay on the page until the Saved message appears. A separate **Save Video to iPad** button can keep a local copy and does not upload again.
+- Dance videos are recorded at 960×540 and 15 frames a second, with a lower bitrate, so a typical ~40 second video stays closer in size to the story PDFs that already reached Drive. Videos larger than about 12 MB are sent in smaller chunks (this needs the updated Apps Script). The Drive upload waits up to four minutes and shows progress.
+- Name and Class on the cover are required for both Drive saves. Download PDF still works without a teacher unlock and does not count as a Drive upload.
+- After a student's story PDF or music video has been saved to Drive, a further Drive upload of that same type for the same Name and Class is blocked. A password field appears so a teacher can unlock another save. The first story save and the first music video save still go through without a password. This gate is remembered on the iPad. If the Apps Script web app is updated (new version, same /exec URL), it can also refuse a repeat save and accept large videos in chunks.
+- Extra text or link files are still not sent. Story save still sends only the PDF.
+
 ## Save My Story uploads only, with a separate Download PDF button
 
 - **Save My Story** now waits for a confirmed Google Drive upload of the story PDF only (`Name_Class_Tung Chung.pdf`). It no longer opens or downloads the PDF as part of saving, because on iPad that could leave the website and cancel the upload.

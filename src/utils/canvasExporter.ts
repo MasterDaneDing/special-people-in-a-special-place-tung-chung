@@ -379,53 +379,192 @@ export async function renderAllStoryPages(
   return { pagePngs, storyText, sentences };
 }
 
+export interface DriveUploadResponse {
+  status?: string;
+  type?: string;
+  fileName?: string;
+  url?: string;
+  message?: string;
+  error?: string;
+  code?: string;
+  complete?: boolean;
+  received?: number;
+}
+
+export class DriveUploadError extends Error {
+  code?: string;
+  constructor(message: string, code?: string) {
+    super(message);
+    this.name = 'DriveUploadError';
+    this.code = code;
+  }
+}
+
+export function isAlreadySavedError(err: unknown): boolean {
+  return err instanceof DriveUploadError && err.code === 'already_saved';
+}
+
+function parseDriveResponse(text: string): DriveUploadResponse | null {
+  if (!text) return null;
+  try {
+    return JSON.parse(text) as DriveUploadResponse;
+  } catch {
+    return null;
+  }
+}
+
+function throwIfDriveFailed(data: DriveUploadResponse | null, httpStatus: number): DriveUploadResponse {
+  // Only treat a confirmed Apps Script success as saved. An empty or
+  // unreadable response is a failure, even if the HTTP status looks OK.
+  if (!data || data.status !== 'ok' || data.error) {
+    throw new DriveUploadError(
+      data?.message || data?.error || `Drive upload failed (${httpStatus})`,
+      data?.code
+    );
+  }
+  return data;
+}
+
 export async function postToGoogleAppsScript(
   url: string,
-  payload: Record<string, unknown>
-): Promise<void> {
+  payload: Record<string, unknown>,
+  options?: {
+    timeoutMs?: number;
+    onProgress?: (pct: number) => void;
+  }
+): Promise<DriveUploadResponse> {
   if (!url.trim()) {
     throw new Error('Google Drive export is not set up yet.');
   }
 
-  const controller = new AbortController();
-  const timeoutId = window.setTimeout(() => controller.abort(), 120_000);
+  const timeoutMs = options?.timeoutMs ?? 120_000;
+  const body = JSON.stringify(payload);
 
-  try {
-    const resp = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify(payload),
-      signal: controller.signal,
-      redirect: 'follow',
-    });
+  return new Promise<DriveUploadResponse>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', url);
+    xhr.setRequestHeader('Content-Type', 'text/plain;charset=utf-8');
+    xhr.timeout = timeoutMs;
+    xhr.responseType = 'text';
 
-    const text = await resp.text();
-    let data: { status?: string; message?: string; error?: string } | null = null;
-    if (text) {
-      try {
-        data = JSON.parse(text) as { status?: string; message?: string; error?: string };
-      } catch {
-        data = null;
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable && options?.onProgress) {
+        options.onProgress(Math.max(0, Math.min(99, Math.round((event.loaded / event.total) * 100))));
       }
-    }
+    };
 
-    // Only treat a confirmed Apps Script success as saved. An empty or
-    // unreadable response is a failure, even if the HTTP status looks OK.
-    if (!resp.ok || !data || data.status !== 'ok' || data.error) {
-      throw new Error(
-        data?.message || data?.error || `Drive upload failed (${resp.status})`
+    xhr.onload = () => {
+      try {
+        const data = throwIfDriveFailed(parseDriveResponse(String(xhr.responseText || '')), xhr.status);
+        options?.onProgress?.(100);
+        resolve(data);
+      } catch (err) {
+        reject(err);
+      }
+    };
+
+    xhr.onerror = () => {
+      reject(new Error('The Google Drive upload could not be completed. Please stay on this page and try again.'));
+    };
+
+    xhr.ontimeout = () => {
+      reject(
+        new Error('The Google Drive upload timed out. Please stay on this page and try again.')
       );
-    }
-  } catch (err) {
-    if (err instanceof DOMException && err.name === 'AbortError') {
-      throw new Error(
-        'The Google Drive upload timed out. Please stay on this page and try again.'
-      );
-    }
-    throw err;
-  } finally {
-    window.clearTimeout(timeoutId);
+    };
+
+    xhr.onabort = () => {
+      reject(new Error('The Google Drive upload was cancelled. Please stay on this page and try again.'));
+    };
+
+    xhr.send(body);
+  });
+}
+
+const SINGLE_VIDEO_POST_MAX_BYTES = 12 * 1024 * 1024;
+const VIDEO_CHUNK_BYTES = 4 * 1024 * 1024;
+const VIDEO_UPLOAD_TIMEOUT_MS = 240_000;
+const VIDEO_CHUNK_TIMEOUT_MS = 120_000;
+
+function makeVideoUploadId(): string {
+  return `v${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
+}
+
+export async function uploadVideoToGoogleDrive(
+  url: string,
+  options: {
+    studentName: string;
+    studentClass: string;
+    mimeType: string;
+    fileName: string;
+    blob: Blob;
+    videoBase64?: string;
+    password?: string;
+    onProgress?: (pct: number) => void;
   }
+): Promise<DriveUploadResponse> {
+  const { studentName, studentClass, mimeType, fileName, blob, password, onProgress } = options;
+  const meta: Record<string, unknown> = {
+    type: 'video',
+    studentName,
+    studentClass,
+    mimeType,
+    fileName,
+  };
+  if (password) meta.password = password;
+
+  // Keep typical classroom videos on the existing one-shot text/plain POST so
+  // Drive still works before the Apps Script is updated. Larger recordings are
+  // sent in chunks so iPads do not have to hold one huge JSON body.
+  if (blob.size <= SINGLE_VIDEO_POST_MAX_BYTES) {
+    const videoBase64 = options.videoBase64 || (await blobToBase64(blob));
+    return postToGoogleAppsScript(
+      url,
+      { ...meta, videoBase64 },
+      { timeoutMs: VIDEO_UPLOAD_TIMEOUT_MS, onProgress }
+    );
+  }
+
+  const uploadId = makeVideoUploadId();
+  const chunkTotal = Math.ceil(blob.size / VIDEO_CHUNK_BYTES);
+  let last: DriveUploadResponse | null = null;
+
+  for (let chunkIndex = 0; chunkIndex < chunkTotal; chunkIndex++) {
+    const start = chunkIndex * VIDEO_CHUNK_BYTES;
+    const end = Math.min(blob.size, start + VIDEO_CHUNK_BYTES);
+    const chunkBase64 = await blobToBase64(blob.slice(start, end));
+    const basePct = Math.round((start / blob.size) * 100);
+    const span = Math.round(((end - start) / blob.size) * 100);
+
+    try {
+      last = await postToGoogleAppsScript(
+        url,
+        {
+          ...meta,
+          action: 'chunk',
+          uploadId,
+          chunkIndex,
+          chunkTotal,
+          chunkBase64,
+        },
+        {
+          timeoutMs: VIDEO_CHUNK_TIMEOUT_MS,
+          onProgress: (pct) => onProgress?.(Math.min(99, basePct + Math.round((span * pct) / 100))),
+        }
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (/no music video data was sent/i.test(message)) {
+        throw new Error(
+          'This music video is too large for the current Drive uploader. Please ask your teacher to update the save script, and you can still save a copy to the iPad.'
+        );
+      }
+      throw err;
+    }
+  }
+
+  onProgress?.(100);
+  return last || { status: 'ok' };
 }
 
 export function downloadStoryBackupHtml(
@@ -770,10 +909,16 @@ export async function recordDanceMusicVideo(options: {
     ),
   ]);
 
+  // Record at 960x540 / 15 fps so a ~40s dance video stays near PDF size
+  // even when iPad Safari ignores MediaRecorder's bitrate hint. Draw in
+  // stage coordinates, then scale onto the smaller recording canvas.
+  const RECORD_WIDTH = 960;
+  const RECORD_HEIGHT = 540;
   const canvas = document.createElement('canvas');
-  canvas.width = STAGE_WIDTH;
-  canvas.height = STAGE_HEIGHT;
+  canvas.width = RECORD_WIDTH;
+  canvas.height = RECORD_HEIGHT;
   const ctx = canvas.getContext('2d')!;
+  ctx.setTransform(RECORD_WIDTH / STAGE_WIDTH, 0, 0, RECORD_HEIGHT / STAGE_HEIGHT, 0, 0);
 
   // Set up audio element + Web Audio API MediaElementAudioSourceNode
   const audio = new Audio();
@@ -812,16 +957,19 @@ export async function recordDanceMusicVideo(options: {
   sourceNode.connect(audioCtx.destination);
   sourceNode.connect(streamDest);
 
-  const canvasStream = canvas.captureStream(30);
+  const canvasStream = canvas.captureStream(15);
   const combinedStream = new MediaStream([
     ...canvasStream.getVideoTracks(),
     ...streamDest.stream.getAudioTracks(),
   ]);
 
   const preferredMime = getPreferredVideoMimeType();
-  const recorder = preferredMime
-    ? new MediaRecorder(combinedStream, { mimeType: preferredMime, videoBitsPerSecond: 2_500_000 })
-    : new MediaRecorder(combinedStream);
+  const recorderOptions: MediaRecorderOptions = {
+    videoBitsPerSecond: 1_200_000,
+    audioBitsPerSecond: 96_000,
+  };
+  if (preferredMime) recorderOptions.mimeType = preferredMime;
+  const recorder = new MediaRecorder(combinedStream, recorderOptions);
 
   const chunks: BlobPart[] = [];
   recorder.ondataavailable = (e) => {

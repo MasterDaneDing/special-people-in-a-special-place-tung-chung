@@ -38,11 +38,21 @@ import {
   StoryPdfResult,
   buildStoryPdf,
   downloadStoryPdf,
+  isAlreadySavedError,
   postToGoogleAppsScript,
   recordDanceMusicVideo,
   renderAllStoryPages,
   sanitizeMusicVideoFileName,
+  uploadVideoToGoogleDrive,
 } from './utils/canvasExporter';
+import {
+  ALREADY_SAVED_MESSAGE,
+  MISSING_NAME_CLASS_MESSAGE,
+  WRONG_PASSWORD_MESSAGE,
+  hasDriveSave,
+  isTeacherOverridePassword,
+  markDriveSave,
+} from './utils/driveSaveGate';
 import { CoverPage } from './components/CoverPage';
 import { InteractiveCharacter } from './components/InteractiveCharacter';
 import { RollingWheel } from './components/RollingWheel';
@@ -101,11 +111,15 @@ export default function App() {
   } | null>(null);
 
   const [videoRecording, setVideoRecording] = useState(false);
+  const [videoPhase, setVideoPhase] = useState<'idle' | 'recording' | 'uploading'>('idle');
   const [videoProgress, setVideoProgress] = useState(0);
   const [videoTimeLabel, setVideoTimeLabel] = useState('');
-  const [videoBanner, setVideoBanner] = useState<string | null>(null);
+  const [videoBanner, setVideoBanner] = useState<{ kind: 'success' | 'error'; text: string } | null>(null);
   const [videoResult, setVideoResult] = useState<(DanceVideoResult & { fileName: string }) | null>(null);
   const recordAbortRef = useRef<AbortController | null>(null);
+  const [teacherPassword, setTeacherPassword] = useState('');
+  const [needStoryPassword, setNeedStoryPassword] = useState(false);
+  const [needVideoPassword, setNeedVideoPassword] = useState(false);
 
   const stageRef = useRef<HTMLDivElement | null>(null);
 
@@ -425,22 +439,57 @@ export default function App() {
     }
   };
 
+  const videoBusy = videoPhase !== 'idle' || videoRecording;
+
   useEffect(() => {
-    if (!storySaving) return;
+    if (!storySaving && !videoBusy) return;
     const onLeave = (event: BeforeUnloadEvent) => {
       event.preventDefault();
       event.returnValue = '';
     };
     window.addEventListener('beforeunload', onLeave);
     return () => window.removeEventListener('beforeunload', onLeave);
-  }, [storySaving]);
+  }, [storySaving, videoBusy]);
+
+  const requireNameAndClass = (
+    setBanner: (banner: { kind: 'success' | 'error'; text: string }) => void
+  ): boolean => {
+    if (bookStudentName.trim() && bookStudentClass.trim()) return true;
+    setBanner({ kind: 'error', text: MISSING_NAME_CLASS_MESSAGE });
+    return false;
+  };
+
+  const allowDriveUpload = (
+    type: 'story' | 'video',
+    setNeedPassword: (need: boolean) => void,
+    setBanner: (banner: { kind: 'success' | 'error'; text: string }) => void
+  ): string | null | undefined => {
+    const already = hasDriveSave(bookStudentName, bookStudentClass, type);
+    if (!already) {
+      setNeedPassword(false);
+      return undefined;
+    }
+    setNeedPassword(true);
+    if (isTeacherOverridePassword(teacherPassword)) {
+      return teacherPassword;
+    }
+    setBanner({
+      kind: 'error',
+      text: teacherPassword ? WRONG_PASSWORD_MESSAGE : ALREADY_SAVED_MESSAGE,
+    });
+    return null;
+  };
 
   const handleSaveStory = async () => {
     if (storySaving || storyDownloading) return;
+    setStoryBanner(null);
+    if (!requireNameAndClass(setStoryBanner)) return;
+    const password = allowDriveUpload('story', setNeedStoryPassword, setStoryBanner);
+    if (password === null) return;
+
     setStorySaving(true);
     setStoryPhase('rendering');
     setStoryProgress(0);
-    setStoryBanner(null);
 
     try {
       const rendered = await renderAllStoryPages(
@@ -476,19 +525,27 @@ export default function App() {
         pdfBase64: pdf.pdfBase64,
         pdfFileName: pdf.fileName,
         mimeType: 'application/pdf',
+        ...(password ? { password } : {}),
       });
 
+      markDriveSave(bookStudentName, bookStudentClass, 'story');
+      setNeedStoryPassword(false);
       setStoryBanner({
         kind: 'success',
         text: `Saved to Google Drive, ${studentName}! Please wait for this message before leaving the page.`,
       });
     } catch (err) {
       console.error(err);
-      const detail = err instanceof Error && err.message ? err.message : 'Please stay on this page and try again.';
-      setStoryBanner({
-        kind: 'error',
-        text: `Could not send the storybook to Google Drive. ${detail}`,
-      });
+      if (isAlreadySavedError(err)) {
+        setNeedStoryPassword(true);
+        setStoryBanner({ kind: 'error', text: ALREADY_SAVED_MESSAGE });
+      } else {
+        const detail = err instanceof Error && err.message ? err.message : 'Please stay on this page and try again.';
+        setStoryBanner({
+          kind: 'error',
+          text: `Could not send the storybook to Google Drive. ${detail}`,
+        });
+      }
     } finally {
       setStorySaving(false);
       setStoryPhase('idle');
@@ -541,7 +598,12 @@ export default function App() {
   };
 
   const handleSaveMusicVideo = async () => {
-    if (videoRecording) return;
+    if (videoRecording || videoPhase !== 'idle') return;
+    setVideoBanner(null);
+    if (!requireNameAndClass(setVideoBanner)) return;
+    const password = allowDriveUpload('video', setNeedVideoPassword, setVideoBanner);
+    if (password === null) return;
+
     const audio = danceAudioRef.current;
     if (audio) {
       audio.pause();
@@ -549,13 +611,15 @@ export default function App() {
     }
 
     setVideoRecording(true);
+    setVideoPhase('recording');
     setVideoProgress(0);
     setVideoTimeLabel('Starting...');
-    setVideoBanner(null);
+    setVideoResult(null);
 
     const controller = new AbortController();
     recordAbortRef.current = controller;
 
+    let recorded: (DanceVideoResult & { fileName: string }) | null = null;
     try {
       const result = await recordDanceMusicVideo({
         page12: pages[11],
@@ -575,33 +639,71 @@ export default function App() {
         studentClass,
         result.mimeType
       );
-      setVideoResult({ ...result, fileName });
+      recorded = { ...result, fileName };
 
-      await postToGoogleAppsScript(config.googleAppsScriptUrl, {
-        type: 'video',
+      // Upload only. Do not open or attach a download link until Drive
+      // confirms, because on iPad a download can leave the page and cancel the request.
+      setVideoPhase('uploading');
+      setVideoProgress(0);
+      setVideoTimeLabel('Uploading to Google Drive...');
+      recordAbortRef.current = null;
+
+      await uploadVideoToGoogleDrive(config.googleAppsScriptUrl, {
         studentName,
         studentClass,
         mimeType: result.mimeType,
-        videoBase64: result.videoBase64,
         fileName,
+        blob: result.blob,
+        videoBase64: result.videoBase64,
+        password,
+        onProgress: (pct) => setVideoProgress(pct),
       });
 
-      setVideoBanner(
-        `Hooray, ${studentName}! Your Tung Chung dance music video was sent to Google Drive!`
-      );
+      markDriveSave(bookStudentName, bookStudentClass, 'video');
+      setNeedVideoPassword(false);
+      setVideoResult(recorded);
+      setVideoBanner({
+        kind: 'success',
+        text: `Saved to Google Drive, ${studentName}! Please wait for this message before leaving the page.`,
+      });
     } catch (err) {
       if ((err as DOMException)?.name === 'AbortError') {
-        setVideoBanner('Music video recording cancelled.');
+        setVideoBanner({ kind: 'error', text: 'Music video recording cancelled.' });
+      } else if (isAlreadySavedError(err)) {
+        setNeedVideoPassword(true);
+        if (recorded) setVideoResult(recorded);
+        setVideoBanner({ kind: 'error', text: ALREADY_SAVED_MESSAGE });
       } else {
         console.error(err);
-        setVideoBanner(
-          'Could not record or send the music video to Google Drive. You can still download a local copy if it appears below.'
-        );
+        if (recorded) setVideoResult(recorded);
+        const detail = err instanceof Error && err.message ? err.message : 'Please stay on this page and try again.';
+        setVideoBanner({
+          kind: 'error',
+          text: `Could not send the music video to Google Drive. ${detail} You can still save a copy to the iPad if it appears below.`,
+        });
       }
     } finally {
       setVideoRecording(false);
+      setVideoPhase('idle');
       recordAbortRef.current = null;
     }
+  };
+
+  const handleDownloadMusicVideo = async () => {
+    if (!videoResult || videoRecording || videoPhase !== 'idle') return;
+    // Stay on the game page. On iPad Safari, <a download> is often ignored and
+    // a same-tab blob navigation would unload the site.
+    const objectUrl = videoResult.objectUrl;
+    const a = document.createElement('a');
+    a.href = objectUrl;
+    a.download = videoResult.fileName;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    a.type = videoResult.mimeType || 'video/mp4';
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
   };
 
   const currentSentence = getPageSentence(currentPage, characters);
@@ -1190,7 +1292,7 @@ export default function App() {
                 Finish &amp; Share Your Tung Chung Storybook!
               </h2>
               <p className="text-base font-medium text-[#3a2e28]/80">
-                Save My Story sends your PDF to Google Drive. Use Download PDF if you want a copy on the iPad. Stay on this page until you see a Saved message.
+                Type your Name and Class on the cover first. Save My Story and Save My Music Video send one copy of each to Google Drive. If you need to save again, ask your teacher. Use the download buttons for a copy on the iPad. Stay on this page until you see a Saved message.
               </p>
             </div>
 
@@ -1199,7 +1301,7 @@ export default function App() {
               <div className="rounded-3xl border-[3px] border-[#3a2e28] bg-white p-4 flex flex-col gap-3">
                 <button
                   type="button"
-                  disabled={storySaving || storyDownloading}
+                  disabled={storySaving || storyDownloading || videoBusy}
                   onClick={handleSaveStory}
                   className="storybook-btn w-full px-6 py-4 rounded-2xl bg-[#4ade80] text-[#3a2e28] text-xl font-bold flex items-center justify-center gap-2.5 disabled:opacity-70"
                 >
@@ -1232,9 +1334,23 @@ export default function App() {
                   </div>
                 )}
 
+                {needStoryPassword && (
+                  <label className="flex flex-col gap-1 text-sm font-bold text-[#3a2e28]">
+                    <span>Teacher password to save again</span>
+                    <input
+                      type="password"
+                      autoComplete="off"
+                      value={teacherPassword}
+                      onChange={(e) => setTeacherPassword(e.target.value)}
+                      className="w-full rounded-2xl border-[2.5px] border-[#3a2e28] bg-[#fffaf0] px-3 py-2 text-base font-bold"
+                      placeholder="Ask your teacher"
+                    />
+                  </label>
+                )}
+
                 <button
                   type="button"
-                  disabled={storySaving || storyDownloading}
+                  disabled={storySaving || storyDownloading || videoBusy}
                   onClick={handleDownloadStoryPdf}
                   className="storybook-btn w-full px-4 py-2.5 rounded-2xl bg-[#fff4dd] text-base font-bold text-[#3a2e28] flex items-center justify-center gap-2 disabled:opacity-70"
                 >
@@ -1261,11 +1377,12 @@ export default function App() {
 
               {/* Save My Music Video Card */}
               <div className="rounded-3xl border-[3px] border-[#3a2e28] bg-white p-4 flex flex-col gap-3">
-                {!videoRecording ? (
+                {videoPhase === 'idle' && !videoRecording ? (
                   <button
                     type="button"
+                    disabled={storySaving}
                     onClick={handleSaveMusicVideo}
-                    className="storybook-btn w-full px-6 py-4 rounded-2xl bg-[#ff5946] text-white text-xl font-bold flex items-center justify-center gap-2.5"
+                    className="storybook-btn w-full px-6 py-4 rounded-2xl bg-[#ff5946] text-white text-xl font-bold flex items-center justify-center gap-2.5 disabled:opacity-70"
                   >
                     <Film className="w-7 h-7" />
                     <span>Save My Music Video</span>
@@ -1273,9 +1390,16 @@ export default function App() {
                 ) : (
                   <div className="space-y-2.5">
                     <div className="flex items-center justify-between text-base font-bold text-[#3a2e28]">
-                      <span>Recording Dance Video...</span>
+                      <span>
+                        {videoPhase === 'uploading'
+                          ? 'Uploading to Google Drive...'
+                          : 'Recording Dance Video...'}
+                      </span>
                       <span className="tabular-nums">
-                        {videoProgress}% ({videoTimeLabel})
+                        {videoProgress}%
+                        {videoPhase === 'recording' && videoTimeLabel
+                          ? ` (${videoTimeLabel})`
+                          : ''}
                       </span>
                     </div>
                     <div className="w-full h-6 rounded-full border-[3px] border-[#3a2e28] bg-[#fff4dd] overflow-hidden">
@@ -1284,31 +1408,63 @@ export default function App() {
                         style={{ width: `${videoProgress}%` }}
                       />
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => recordAbortRef.current?.abort()}
-                      className="storybook-btn w-full px-4 py-2 rounded-2xl bg-white text-base font-bold text-[#3a2e28]"
-                    >
-                      Cancel Recording
-                    </button>
+                    {videoPhase === 'recording' && (
+                      <button
+                        type="button"
+                        onClick={() => recordAbortRef.current?.abort()}
+                        className="storybook-btn w-full px-4 py-2 rounded-2xl bg-white text-base font-bold text-[#3a2e28]"
+                      >
+                        Cancel Recording
+                      </button>
+                    )}
+                    {videoPhase === 'uploading' && (
+                      <p className="text-sm font-medium text-[#3a2e28]/70 text-center">
+                        Stay on this page until you see a Saved message.
+                      </p>
+                    )}
                   </div>
                 )}
 
                 {videoBanner && (
-                  <div className="rounded-2xl border-2 border-[#3a2e28] bg-[#dcfce7] px-4 py-2.5 text-sm sm:text-base font-bold text-[#3a2e28]">
-                    {videoBanner}
+                  <div
+                    className={`rounded-2xl border-2 border-[#3a2e28] px-4 py-2.5 text-sm sm:text-base font-bold text-[#3a2e28] ${
+                      videoBanner.kind === 'error' ? 'bg-[#fecaca]' : 'bg-[#dcfce7]'
+                    }`}
+                    role="status"
+                    aria-live="polite"
+                  >
+                    {videoBanner.text}
                   </div>
                 )}
 
-                {videoResult && (
-                  <a
-                    href={videoResult.objectUrl}
-                    download={videoResult.fileName}
-                    className="storybook-btn w-full px-4 py-2.5 rounded-2xl bg-[#ffd93d] text-base font-bold text-[#3a2e28] flex items-center justify-center gap-2 no-underline"
-                  >
-                    <Download className="w-5 h-5" />
-                    <span>Save Video to iPad</span>
-                  </a>
+                {needVideoPassword && videoPhase === 'idle' && (
+                  <label className="flex flex-col gap-1 text-sm font-bold text-[#3a2e28]">
+                    <span>Teacher password to save again</span>
+                    <input
+                      type="password"
+                      autoComplete="off"
+                      value={teacherPassword}
+                      onChange={(e) => setTeacherPassword(e.target.value)}
+                      className="w-full rounded-2xl border-[2.5px] border-[#3a2e28] bg-[#fffaf0] px-3 py-2 text-base font-bold"
+                      placeholder="Ask your teacher"
+                    />
+                  </label>
+                )}
+
+                {videoResult && videoPhase === 'idle' && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={handleDownloadMusicVideo}
+                      className="storybook-btn w-full px-4 py-2.5 rounded-2xl bg-[#ffd93d] text-base font-bold text-[#3a2e28] flex items-center justify-center gap-2"
+                    >
+                      <Download className="w-5 h-5" />
+                      <span>Save Video to iPad</span>
+                    </button>
+                    <p className="text-sm font-medium text-[#3a2e28]/70 text-center">
+                      Save Video to iPad keeps a copy on the iPad. It does not send your video to Google Drive again.
+                    </p>
+                  </>
                 )}
               </div>
             </div>
