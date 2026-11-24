@@ -437,48 +437,44 @@ export async function postToGoogleAppsScript(
     throw new Error('Google Drive export is not set up yet.');
   }
 
+  // Use fetch, not XHR. Apps Script replies with a redirect to
+  // script.googleusercontent.com; XHR often fails that hop on iPad Safari
+  // (status 0 / onerror), which is what broke Drive saves after the 23 Nov
+  // afternoon deploy. fetch with redirect: 'follow' is the path that already
+  // delivered the 4E story PDFs that morning.
   const timeoutMs = options?.timeoutMs ?? 120_000;
-  const body = JSON.stringify(payload);
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
 
-  return new Promise<DriveUploadResponse>((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    xhr.open('POST', url);
-    xhr.setRequestHeader('Content-Type', 'text/plain;charset=utf-8');
-    xhr.timeout = timeoutMs;
-    xhr.responseType = 'text';
+  try {
+    options?.onProgress?.(15);
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+      redirect: 'follow',
+    });
 
-    xhr.upload.onprogress = (event) => {
-      if (event.lengthComputable && options?.onProgress) {
-        options.onProgress(Math.max(0, Math.min(99, Math.round((event.loaded / event.total) * 100))));
-      }
-    };
-
-    xhr.onload = () => {
-      try {
-        const data = throwIfDriveFailed(parseDriveResponse(String(xhr.responseText || '')), xhr.status);
-        options?.onProgress?.(100);
-        resolve(data);
-      } catch (err) {
-        reject(err);
-      }
-    };
-
-    xhr.onerror = () => {
-      reject(new Error('The Google Drive upload could not be completed. Please stay on this page and try again.'));
-    };
-
-    xhr.ontimeout = () => {
-      reject(
-        new Error('The Google Drive upload timed out. Please stay on this page and try again.')
+    const text = await resp.text();
+    const data = throwIfDriveFailed(parseDriveResponse(text), resp.status);
+    options?.onProgress?.(100);
+    return data;
+  } catch (err) {
+    if (err instanceof DriveUploadError) throw err;
+    if (err instanceof DOMException && err.name === 'AbortError') {
+      throw new Error(
+        'The Google Drive upload timed out. Please stay on this page and try again.'
       );
-    };
-
-    xhr.onabort = () => {
-      reject(new Error('The Google Drive upload was cancelled. Please stay on this page and try again.'));
-    };
-
-    xhr.send(body);
-  });
+    }
+    throw new Error(
+      err instanceof Error && err.message
+        ? err.message
+        : 'The Google Drive upload could not be completed. Please stay on this page and try again.'
+    );
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
 }
 
 const SINGLE_VIDEO_POST_MAX_BYTES = 12 * 1024 * 1024;

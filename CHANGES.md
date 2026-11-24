@@ -1,5 +1,9 @@
 # Changes — Special People in a Special Place: Tung Chung!
 
+## Drive saves use the iPad-safe upload path again
+
+- Saving to Google Drive (story PDF and music video) now uses the same `fetch` request that already worked for the 4E story PDFs, instead of `XMLHttpRequest`. The XHR path could fail on iPad Safari after Apps Script's redirect, so the game never saw `{ status: "ok" }`. Stay on the page until the Saved message appears, then refresh if an iPad still has the older site cached.
+
 ## Music video Drive save, and one Drive save of each type unless a teacher unlocks another
 
 - **Save My Music Video** now waits for a confirmed Google Drive upload of the music video only (`Name_Class_Music Video.mp4`, or `.webm` if that is what the iPad records). It no longer shows a download link or opens the video until Drive answers `{ status: "ok" }`, because on iPad that could leave the website and cancel the upload. The button shows **Recording Dance Video...**, then **Uploading to Google Drive...**, then a green **Saved to Google Drive** message or a red error. Stay on the page until the Saved message appears. A separate **Save Video to iPad** button can keep a local copy and does not upload again.
